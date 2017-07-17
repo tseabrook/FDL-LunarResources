@@ -3,8 +3,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import glymur
 import random
-from skimage import data, io, filters
+from skimage import data, io, filters, img_as_uint, exposure
+
+from scipy.sparse import csr_matrix
 import os.path
+import matplotlib
 
 
 def generateIlluminationMap(latitude, longitude, slopeMap):
@@ -228,40 +231,87 @@ def main():
     map = random.choice(maps)
 
     print("Searching for precomputed Region Map")
-    regionMapFilename = 'imgs/regionMap1.npy'
+    regionMapFilename = 'imgs/regionMap_50.npy'
     if os.path.isfile(regionMapFilename) is True:
         print("Region file found: ", regionMapFilename)
         regionMap = np.int_(np.load(regionMapFilename))
+        regionCounts = np.load('imgs/regionMap_counts_50.npy')
     else:
         print("Region file not found, generating Region map")
-        regionMap, regionCounts = np.int_(connectedComponents(map))
+        regionMap = np.int_(connectedComponents(map))
+        regionIndices, regionCounts = countPixelsPerRegion_fast(regionMap)
         np.save(regionMapFilename, regionMap)
-        np.save('imgs/regionMap1_counts.npy', regionCounts)
+        np.save('imgs/regionMap_counts_50.npy', regionCounts)
+
+
+
+    maxRegion = np.where(regionCounts == np.max(regionCounts))
+    regionIndices = np.where(regionMap == maxRegion)
+    y_ind = regionIndices[0]
+    x_ind = regionIndices[1]
+    #y_ind, x_ind = np.floor_divide(regionIndices[maxRegion][0], regionMap[0].size), np.modulus(regionIndices[maxRegion][0], regionMap[0].size)
+
+    im = np.array([[0, 0, 0]], dtype='float64')
+    im = np.matlib.repmat(im,regionMap.shape[0],regionMap.shape[1]).reshape(regionMap.shape[0],regionMap.shape[1],3)
+    im[y_ind,x_ind,0] = 1
+    im = img_as_uint(im)
+    io.imsave('img/test_16bit_50.png', im)
+
+    #a0 = np.array([chr(0) + chr(0) + chr(0)])
+    #data = np.matlib.repmat(a0, regionMap.shape[0], regionMap.shape[1])
+    #im = Image.new("RGB", (regionMap.shape[0], regionMap.shape[1]), "black")
+    #pix = im.load()
+    #pix[y_ind, x_ind] = [chr(255) + chr(0) + chr(0)]
+    #im = Image.frombytes("RGB", (regionMap.shape[0], regionMap.shape[1]), data)
+    #im.
 
     agent = Agent(map)
     print(map)
     print(agent)
 
+def compute_M(data):
+    cols = np.arange(data.size)
+    return csr_matrix((cols, (data.ravel(), cols)),
+                      shape=(data.max() + 1, data.size))
+
+def get_indices_sparse(data):
+    M = compute_M(data)
+    return [np.unravel_index(row.data, data.shape) for row in M]
+
+
+def countPixelsPerRegion_fast(regionMap):
+    #https://stackoverflow.com/questions/33281957/faster-alternative-to-numpy-where
+    #MUCH faster than looping np.where (>10x)
+    #Cannot handle negative values however, so those are removed beforehand
+    indices = get_indices_sparse(regionMap[np.where(regionMap != -1)])
+    counts = np.zeros((np.max(regionMap)+1))
+    for i in range(np.max(regionMap)+1):
+        counts[i] = indices[i][0].size
+    return indices, counts
+
+
+
 def timerInformation(jobname, percentage, start, elapsed):
-    end = timer()
-    elapsed += end - start
-    start = timer()
-    secs_remaining = ((elapsed * 100) / percentage) - elapsed
+    #timerInformation updates and prints [elapsed] times for [jobname] with an estimated time remaining
+    end = timer() #Timestamp
+    elapsed += end - start #Time since last start call to timer() is added to overall elapsed time
+    start = timer() #New timer() is started
+    secs_remaining = ((elapsed * 100) / percentage) - elapsed #calculating overall job time minus elapsed
     hours_remaining = np.floor_divide(secs_remaining, 3600)
     secs_remaining = np.mod(secs_remaining, 3600)
     mins_remaining = np.floor_divide(secs_remaining, 60)
     secs_remaining = np.floor_divide(np.mod(secs_remaining, 60), 1)
-    s = jobname+' is '+repr(percentage)+'% Complete. Estimated Time Remaining: '
-    if hours_remaining > 0:
+    s = jobname+' is '+repr(percentage)+'% Complete. Estimated Time Remaining: ' #Print job and percentage completed
+    if hours_remaining > 0: #Conditionally print hours remaining
         s += repr(np.int_(hours_remaining)) + 'h '
-    if mins_remaining > 0:
+    if mins_remaining > 0: #Conditionally print minutes remaining
         s += repr(np.int_(mins_remaining)) + 'm '
-    s += repr(np.int(secs_remaining)) + 's.'
-    s += ' Time Elapsed: ' + repr(np.int_(np.floor_divide(elapsed, 60))) + 'mins.'
+    s += repr(np.int(secs_remaining)) + 's.' #Print time remaining
+    s += ' Time Elapsed: ' + repr(np.int_(np.floor_divide(elapsed, 60))) + 'mins.' #Print time elapsed
     print(s)
-    return start, elapsed
+    return start, elapsed #Return newly initialised timer and current elapsed time
 
-def connectedComponents(map, roverMaxSlope=15):
+def connectedComponents(map, roverMaxSlope=50):
     # Algorithm 1: Connected Components
     # Initialize all cells in Map to unlabeled2:
     #    while num(unlabeled) > 0
@@ -270,84 +320,95 @@ def connectedComponents(map, roverMaxSlope=15):
     #        C <- FLOODFILL3D(cseed)
     #        Setlabel(c) forall c in C
     #    end
-    # functionFLOODFILL3D(seed)
+    # function FLOODFILL3D(seed)
     #    return the set C of all cells connected to seed
     # end
-    w = map.img.shape[1]
-    h = map.img.shape[0]
-    labels = np.ones((h,w)) * -1
-    candidates = np.nonzero(map.illuminationMap & map.DTEMap)
-    labels[candidates[0],candidates[1]] = 0
+    w, h = map.img.shape[1], map.img.shape[0] #Size of search area
+    labels = np.ones((h,w)) * -1 #Initially set all pixels as -1
+    candidates = np.nonzero(map.illuminationMap & map.DTEMap) #Pixels that satisfy illumination and DTE
 
-    nextLabel = 0
-    checkList = []
-    seeds = np.where(labels == 0)
-    num_total = seeds[0].size
-    label_count = [0] #First element counts number of unilluminated and non-DTE pixels
-    num_complete = 0
-    perc_complete = 0
-    time_elapsed = 0
-    start = timer()
+    # NOT OPTIMAL - OPTIMAL REQUIRES EACH ROW TO BE NEW LABEL, EACH COL AS 1D INDEX
+    labels[candidates[0],candidates[1]] = 0 #Become candidates for connected components search
+    nextLabel = 0 #Region ID (0 means unlabelled)
+    checkList = [] #Initialise checklist, contains pixels for neighbourhood traversability checks
+    seeds = np.where(labels == 0) #Find all unlabelled pixels
+    num_total = seeds[0].size #Count number of unlabelled pixels
+    num_complete = 0 #Initialise counter
+    perc_complete = 0 #Initialise percentage complete for timer
+    time_elapsed = 0 #Initialise time elapsed for timer
+    start = timer() #Initialise timer
+    #BEGIN CONNECTED COMPONENTS ALGORITHM
     while(seeds[0].size > 0):
-        nextLabel += 1 #Begin a new label class
-        label_count.append(0) #For each new label, begin a new count
-        y = seeds[0][0]
-        x = seeds[1][0]
-        if(map.illuminationMap[y,x] == 1 & map.DTEMap[y,x] == 1): #If this pixel satisfies illumination and DTE
-            labels[y,x] = nextLabel #Then begin the new group (else add to -1 pile)
-            if checkList.__len__() == 0:
-                checkList = [[y, x]]
-            else:
-                checkList = checkList.append([y,x]) #Add pixel to checklist
+        nextLabel += 1 #Increment label class ID
+        y, x = seeds[0][0],seeds[1][0]
+        labels[y,x] = nextLabel #Add next pixel to the new label class
 
-            while checkList.__len__() > 0: #checklist
-                y, x = checkList.pop() #Take last pixel from checklist, to find qualifying neighbours
-                num_complete += 1
-                label_count[nextLabel] += 1
-                #TIMER SECTION
-                new_perc_complete = np.floor_divide(num_complete*100,num_total)
-                if new_perc_complete > perc_complete:
-                    perc_complete = new_perc_complete
-                    #end = timer()
-                    start, time_elapsed = timerInformation('Flood Fill', perc_complete, start, time_elapsed)
-                    #start = timer()
-                #END TIMER SECTION
-
-                if x > 0:
-                    xmin = 0
-                    if x < (w - 1): #middle column
-                        xmax = 3
-                    else: #rightmost column
-                        xmax = 2
-                else: #leftmost column
-                    xmax = 3
-                    xmin = 1
-                if y > 0:
-                    ymin = 0
-                    if y < (h - 1): #middle row
-                        ymax = 3
-                    else: #bottom row
-                        ymax = 2
-                else: #top row
-                    ymax = 3
-                    ymin = 1
-                for i in range(xmin, xmax):
-                    for j in range(ymin, ymax):
-                        if (j != 1) ^ (i != 1):
-                            if labels[y+j-1,x+i-1] == 0:
-                                if np.absolute(map.slopeMap[y][x][i][j]) <= roverMaxSlope:
-                                    if(map.illuminationMap[y+j-1,x+i-1] == 1) & (map.DTEMap[y+j-1,x+i-1] == 1):
-                                        labels[y+j-1,x+i-1] = nextLabel
-                                        checkList.append([y+j-1,x+i-1])
-            seeds = np.where(labels == 0)
+        if checkList.__len__() == 0: #Create a list of pixels for FloodFill neighbour checking
+            checkList = [[y, x]]
         else:
-            labels[y,x] = -1
-            num_remaining += 1
-            label_count[0] += 1
-            seeds = np.where(labels == 0)
+            checkList = checkList.append([y,x])
 
-    return labels, label_count
+        # BEGIN TIMER UPDATE SECTION [Placement outside FloodFill improves speed (4x fewer divisions for 15 roverMaxSlope)
+        #                               but reduces initial accuracy]
+        new_perc_complete = np.floor_divide(num_complete * 100, num_total)  # update percentage complete integer
+        if new_perc_complete > perc_complete:  # if integer is higher than last
+            perc_complete = new_perc_complete  # then update
+            start, time_elapsed = timerInformation('Flood Fill', perc_complete, start, time_elapsed)  # and print ET
+        # END TIMER UPDATE SECTION
 
+        #BEGIN FLOODFILL ALGORITHM
+        while checkList.__len__() > 0: #Whilst there are qualifying pixels in this iteration of FloodFill
+            y, x = checkList.pop() #Take pixel from checklist, to find qualifying neighbours
+            num_complete += 1 #update count for timer
+
+            #BEGIN LOCATION SPECIFIC NEIGHBOUR INDEXING
+            if x > 0:
+                xmin = 0
+                if x < (w - 1): #middle column
+                    xmax = 3
+                else: #rightmost column
+                    xmax = 2
+            else: #leftmost column
+                xmax = 3
+                xmin = 1
+            if y > 0:
+                ymin = 0
+                if y < (h - 1): #middle row
+                    ymax = 3
+                else: #bottom row
+                    ymax = 2
+            else: #top row
+                ymax = 3
+                ymin = 1
+            #END LOCATION SPECIFIC NEIGHBOUR INDEXING
+
+            #BEGIN NEIGHBOUR TRAVERSABILITY CHECK
+            for i in range(xmin, xmax):
+                for j in range(ymin, ymax): #for all neighbouring pixels
+                    if (j != 1) ^ (i != 1): #not including current pixel
+                        if labels[y+j-1,x+i-1] == 0: #and only considering unlabeled pixels
+                            if np.absolute(map.slopeMap[y][x][i][j]) <= roverMaxSlope: #check if they can be reached from this pixel
+                                #if(map.illuminationMap[y+j-1,x+i-1] == 1) & (map.DTEMap[y+j-1,x+i-1] == 1): #not necessary, already checked in precompute
+                                labels[y+j-1,x+i-1] = nextLabel
+                                checkList.append([y+j-1,x+i-1])
+            #END NEIGHBOUR TRAVERSABILITY CHECK
+        #END FLOODFILL ALGORITHM
+        seeds = np.where(labels == 0) #Reset candidate seeds
+    #END CONNECTED COMPONENTS ALGORITHM
+    return labels #return labels and count
 
 if __name__ == '__main__':
     main()
+
+
+
+
+#### LEGACY CODE ####
+#
+#    def countPixelsPerRegion_simple(regionMap):
+#        maxID = np.max(regionMap)
+#        labelCount = np.zeros((maxID))  # Get number of connected regions
+#        labelCount[0] = np.where(regionMap == -1)[0].size
+#        for i in range(1, maxID + 1):
+#            labelCount[i] = np.where(regionMap == i)[0].size  # Count number of pixels in connected region i
+#        return labelCount
