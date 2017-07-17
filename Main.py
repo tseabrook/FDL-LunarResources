@@ -231,17 +231,17 @@ def main():
     map = random.choice(maps)
 
     print("Searching for precomputed Region Map")
-    regionMapFilename = 'imgs/regionMap_50.npy'
+    regionMapFilename = 'imgs/regionMap_150.npy'
     if os.path.isfile(regionMapFilename) is True:
         print("Region file found: ", regionMapFilename)
         regionMap = np.int_(np.load(regionMapFilename))
-        regionCounts = np.load('imgs/regionMap_counts_50.npy')
+        regionCounts = np.load('imgs/regionMap_counts_150.npy')
     else:
         print("Region file not found, generating Region map")
         regionMap = np.int_(connectedComponents(map))
         regionIndices, regionCounts = countPixelsPerRegion_fast(regionMap)
         np.save(regionMapFilename, regionMap)
-        np.save('imgs/regionMap_counts_50.npy', regionCounts)
+        np.save('imgs/regionMap_counts_150.npy', regionCounts)
 
 
 
@@ -255,7 +255,7 @@ def main():
     im = np.matlib.repmat(im,regionMap.shape[0],regionMap.shape[1]).reshape(regionMap.shape[0],regionMap.shape[1],3)
     im[y_ind,x_ind,0] = 1
     im = img_as_uint(im)
-    io.imsave('img/test_16bit_50.png', im)
+    io.imsave('imgs/test_16bit_150.png', im)
 
     #a0 = np.array([chr(0) + chr(0) + chr(0)])
     #data = np.matlib.repmat(a0, regionMap.shape[0], regionMap.shape[1])
@@ -311,7 +311,7 @@ def timerInformation(jobname, percentage, start, elapsed):
     print(s)
     return start, elapsed #Return newly initialised timer and current elapsed time
 
-def connectedComponents(map, roverMaxSlope=50):
+def connectedComponents(map, roverMaxSlope=150):
     # Algorithm 1: Connected Components
     # Initialize all cells in Map to unlabeled2:
     #    while num(unlabeled) > 0
@@ -333,14 +333,21 @@ def connectedComponents(map, roverMaxSlope=50):
     checkList = [] #Initialise checklist, contains pixels for neighbourhood traversability checks
     seeds = np.where(labels == 0) #Find all unlabelled pixels
     num_total = seeds[0].size #Count number of unlabelled pixels
+    search_indexes = range(num_total)
     num_complete = 0 #Initialise counter
+    next_ind = 0
     perc_complete = 0 #Initialise percentage complete for timer
     time_elapsed = 0 #Initialise time elapsed for timer
     start = timer() #Initialise timer
     #BEGIN CONNECTED COMPONENTS ALGORITHM
-    while(seeds[0].size > 0):
+
+    while(num_complete < num_total):
         nextLabel += 1 #Increment label class ID
-        y, x = seeds[0][0],seeds[1][0]
+        y, x = seeds[0][next_ind], seeds[1][next_ind]
+        while(labels[y,x] != 0):
+            next_ind += 1
+            y, x = seeds[0][next_ind], seeds[1][next_ind]
+
         labels[y,x] = nextLabel #Add next pixel to the new label class
 
         if checkList.__len__() == 0: #Create a list of pixels for FloodFill neighbour checking
@@ -348,18 +355,18 @@ def connectedComponents(map, roverMaxSlope=50):
         else:
             checkList = checkList.append([y,x])
 
-        # BEGIN TIMER UPDATE SECTION [Placement outside FloodFill improves speed (4x fewer divisions for 15 roverMaxSlope)
-        #                               but reduces initial accuracy]
-        new_perc_complete = np.floor_divide(num_complete * 100, num_total)  # update percentage complete integer
-        if new_perc_complete > perc_complete:  # if integer is higher than last
-            perc_complete = new_perc_complete  # then update
-            start, time_elapsed = timerInformation('Flood Fill', perc_complete, start, time_elapsed)  # and print ET
-        # END TIMER UPDATE SECTION
-
         #BEGIN FLOODFILL ALGORITHM
         while checkList.__len__() > 0: #Whilst there are qualifying pixels in this iteration of FloodFill
             y, x = checkList.pop() #Take pixel from checklist, to find qualifying neighbours
             num_complete += 1 #update count for timer
+
+            # BEGIN TIMER UPDATE SECTION [Placement outside FloodFill improves speed (4x fewer divisions for 15 roverMaxSlope)
+            #                               but reduces initial accuracy]
+            new_perc_complete = np.floor_divide(num_complete * 100, num_total)  # update percentage complete integer
+            if new_perc_complete > perc_complete:  # if integer is higher than last
+                perc_complete = new_perc_complete  # then update
+                start, time_elapsed = timerInformation('Flood Fill', perc_complete, start, time_elapsed)  # and print ET
+                # END TIMER UPDATE SECTION
 
             #BEGIN LOCATION SPECIFIC NEIGHBOUR INDEXING
             if x > 0:
@@ -393,7 +400,7 @@ def connectedComponents(map, roverMaxSlope=50):
                                 checkList.append([y+j-1,x+i-1])
             #END NEIGHBOUR TRAVERSABILITY CHECK
         #END FLOODFILL ALGORITHM
-        seeds = np.where(labels == 0) #Reset candidate seeds
+        #seeds = np.where(labels == 0) #Reset candidate seeds
     #END CONNECTED COMPONENTS ALGORITHM
     return labels #return labels and count
 
