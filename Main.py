@@ -4,26 +4,36 @@ import numpy as np
 import glymur
 import random
 from skimage import data, io, filters, img_as_uint, exposure
-
+import gc
 from scipy.sparse import csr_matrix
 import os.path
 import matplotlib
+from collections import namedtuple
+from operator import itemgetter
+from pprint import pformat
 
-
-def generateIlluminationMap(latitude, longitude, slopeMap):
+def generateIlluminationMap(latitude, longitude, slopeMap, opticalMap):
     "This function generates an illumination map corresponding to the optical map provided."
     print("I'd like you to generate an illumination map for me.")
-    w=slopeMap.shape[1]
-    h=slopeMap.shape[0]
 
-    illuminationMap = np.zeros((h,w))
+    # PROTOTYPE A: Sun is on western horizon
+   # w=slopeMap.shape[1]
+   # h=slopeMap.shape[0]
+   # illuminationMap = np.zeros((h,w))
+   # for x in range(w):
+   #     for y in range(h):
+   #         if slopeMap[y][x][0][1] <= 0: #If the western pixel does not incline, then the pixel is illuminated
+   #             illuminationMap[y][x] = 1
 
-    # PROTOTYPE: Sun is on western horizon
-    for x in range(w):
-        for y in range(h):
-            if slopeMap[y][x][0][1] <= 0: #If the western pixel does not incline, then the pixel is illuminated
-                illuminationMap[y][x] = 1
+    # PROTOTYPE B: Illumination matching colour of photo
+    #               dims linearly until complete darkness
+    w=opticalMap.shape[1]
+    h=opticalMap.shape[0]
+    illuminationMap = np.zeros((8,h,w), dtype=bool)
+    for i in range(8):
+        illuminationMap[i] = opticalMap > ((i*30)+10)
 
+    #
     #The following line doesn't work, but maybe there's a way.
     #illuminationMap[np.nonzero(slopeMap[:][:][1][0] >0)] = 1
     return illuminationMap
@@ -34,7 +44,7 @@ def generateDTEMap(latitude, longitude, slopeMap):
     w=slopeMap.shape[1]
     h=slopeMap.shape[0]
 
-    DTEMap = np.zeros((h,w))
+    DTEMap = np.zeros((h,w), dtype=bool)
     # PROTOTYPE: Earth is on northern horizon
     for x in range(w):
         for y in range(h):
@@ -170,13 +180,13 @@ class TraverseMap:
         if (illuminationMapFilename is None):
             print("No illumination map provided")
             print("Searching for matching illumination file")
-            illuminationMapFilename = opticalMapFilename[0:opticalMapFilename.index('.')] + '_illum.npy'
+            illuminationMapFilename = opticalMapFilename[0:opticalMapFilename.index('.')] + '_illumB.npy'
             if os.path.isfile(illuminationMapFilename) is True:
                 print("Illumination file found: ", illuminationMapFilename)
-                self.illuminationMap = np.int_(np.load(illuminationMapFilename))
+                self.illuminationMap = np.load(illuminationMapFilename)
             else:
                 print("Illumination file not found, generating illumination map")
-                self.illuminationMap = np.int_(generateIlluminationMap(latitude, longitude, self.slopeMap))
+                self.illuminationMap = generateIlluminationMap(latitude, longitude, self.slopeMap, self.img)
                 np.save(illuminationMapFilename, self.illuminationMap)
         else:
             self.illuminationMap = np.load(illuminationMapFilename)
@@ -186,10 +196,10 @@ class TraverseMap:
             DTEMapFilename = opticalMapFilename[0:opticalMapFilename.index('.')] + '_DTE.npy'
             if os.path.isfile(DTEMapFilename) is True:
                 print("DTE file found: ", DTEMapFilename)
-                self.DTEMap = np.int_(np.load(DTEMapFilename))
+                self.DTEMap = np.load(DTEMapFilename)
             else:
                 print("DTE file not found, generating DTE map")
-                self.DTEMap = np.int_(generateDTEMap(latitude, longitude, self.slopeMap))
+                self.DTEMap = generateDTEMap(latitude, longitude, self.slopeMap)
                 np.save(DTEMapFilename, self.DTEMap)
         else:
             self.DTEMap = np.load(DTEMapFilename)
@@ -221,53 +231,6 @@ class Agent:
     def print_agentInit(self):
         return 'Agent initialised at location: {initialState}'.format(initialState=self.initialState)
 
-def main():
-    #main initialises by loading relevant maps from database
-    maps = [
-            #TraverseMap('imgs/SLDEM2015_256_0N_60N_000_120.jp2',None,None,None,None)
-            TraverseMap('imgs/prototype_plato_crater.jpeg', None, None, None, None)
-        ]
-#    agents =
-    map = random.choice(maps)
-
-    print("Searching for precomputed Region Map")
-    regionMapFilename = 'imgs/regionMap_150.npy'
-    if os.path.isfile(regionMapFilename) is True:
-        print("Region file found: ", regionMapFilename)
-        regionMap = np.int_(np.load(regionMapFilename))
-        regionCounts = np.load('imgs/regionMap_counts_150.npy')
-    else:
-        print("Region file not found, generating Region map")
-        regionMap = np.int_(connectedComponents(map))
-        regionIndices, regionCounts = countPixelsPerRegion_fast(regionMap)
-        np.save(regionMapFilename, regionMap)
-        np.save('imgs/regionMap_counts_150.npy', regionCounts)
-
-
-
-    maxRegion = np.where(regionCounts == np.max(regionCounts))
-    regionIndices = np.where(regionMap == maxRegion)
-    y_ind = regionIndices[0]
-    x_ind = regionIndices[1]
-    #y_ind, x_ind = np.floor_divide(regionIndices[maxRegion][0], regionMap[0].size), np.modulus(regionIndices[maxRegion][0], regionMap[0].size)
-
-    im = np.array([[0, 0, 0]], dtype='float64')
-    im = np.matlib.repmat(im,regionMap.shape[0],regionMap.shape[1]).reshape(regionMap.shape[0],regionMap.shape[1],3)
-    im[y_ind,x_ind,0] = 1
-    im = img_as_uint(im)
-    io.imsave('imgs/test_16bit_150.png', im)
-
-    #a0 = np.array([chr(0) + chr(0) + chr(0)])
-    #data = np.matlib.repmat(a0, regionMap.shape[0], regionMap.shape[1])
-    #im = Image.new("RGB", (regionMap.shape[0], regionMap.shape[1]), "black")
-    #pix = im.load()
-    #pix[y_ind, x_ind] = [chr(255) + chr(0) + chr(0)]
-    #im = Image.frombytes("RGB", (regionMap.shape[0], regionMap.shape[1]), data)
-    #im.
-
-    agent = Agent(map)
-    print(map)
-    print(agent)
 
 def compute_M(data):
     cols = np.arange(data.size)
@@ -311,7 +274,13 @@ def timerInformation(jobname, percentage, start, elapsed):
     print(s)
     return start, elapsed #Return newly initialised timer and current elapsed time
 
-def connectedComponents(map, roverMaxSlope=150):
+def illuminationDTEEligibility(illuminationMap, DTEMap):
+    candidates = illuminationMap & DTEMap
+    return np.nonzero(candidates)
+
+
+
+def connectedComponents(map, roverMaxSlope=50):
     # Algorithm 1: Connected Components
     # Initialize all cells in Map to unlabeled2:
     #    while num(unlabeled) > 0
@@ -323,17 +292,23 @@ def connectedComponents(map, roverMaxSlope=150):
     # function FLOODFILL3D(seed)
     #    return the set C of all cells connected to seed
     # end
-    w, h = map.img.shape[1], map.img.shape[0] #Size of search area
-    labels = np.ones((h,w)) * -1 #Initially set all pixels as -1
-    candidates = np.nonzero(map.illuminationMap & map.DTEMap) #Pixels that satisfy illumination and DTE
+    w, h, d = map.img.shape[1], map.img.shape[0], map.illuminationMap.shape[0] #Size of search area
+
+
+    labels = np.zeros((d,h,w), dtype=np.uint32) #uint32 covers 0 to 4,294,967,295
+    valid_pixels = np.zeros((d,h,w), dtype=bool) #initalise indicator for whether pixel should be searched over
+
+    candidates = illuminationDTEEligibility(map.illuminationMap, map.DTEMap) #find all pixels that satisfy illumination and DTE
+    valid_pixels[candidates[0],candidates[1],candidates[2]] = True
+
+    #candidates = illuminationDTEEligibility(map.illuminationMap, map.DTEMap) #Pixels that satisfy illumination and DTE
 
     # NOT OPTIMAL - OPTIMAL REQUIRES EACH ROW TO BE NEW LABEL, EACH COL AS 1D INDEX
-    labels[candidates[0],candidates[1]] = 0 #Become candidates for connected components search
+    #  #Become candidates for connected components search
     nextLabel = 0 #Region ID (0 means unlabelled)
     checkList = [] #Initialise checklist, contains pixels for neighbourhood traversability checks
-    seeds = np.where(labels == 0) #Find all unlabelled pixels
-    num_total = seeds[0].size #Count number of unlabelled pixels
-    search_indexes = range(num_total)
+    seeds = np.nonzero(valid_pixels) #Find all valid unlabelled pixels
+    num_total = seeds[0].size #Count number of valid unlabelled pixels
     num_complete = 0 #Initialise counter
     next_ind = 0
     perc_complete = 0 #Initialise percentage complete for timer
@@ -343,21 +318,21 @@ def connectedComponents(map, roverMaxSlope=150):
 
     while(num_complete < num_total):
         nextLabel += 1 #Increment label class ID
-        y, x = seeds[0][next_ind], seeds[1][next_ind]
-        while(labels[y,x] != 0):
+        z, y, x = seeds[0][next_ind], seeds[1][next_ind], seeds[2][next_ind]
+        while(labels[z,y,x] != 0):
             next_ind += 1
-            y, x = seeds[0][next_ind], seeds[1][next_ind]
+            z, y, x = seeds[0][next_ind], seeds[1][next_ind], seeds[2][next_ind]
 
-        labels[y,x] = nextLabel #Add next pixel to the new label class
+        labels[z,y,x] = nextLabel #Add next pixel to the new label class
 
         if checkList.__len__() == 0: #Create a list of pixels for FloodFill neighbour checking
-            checkList = [[y, x]]
+            checkList = [[z, y, x]]
         else:
-            checkList = checkList.append([y,x])
+            checkList = checkList.append([z, y, x])
 
         #BEGIN FLOODFILL ALGORITHM
         while checkList.__len__() > 0: #Whilst there are qualifying pixels in this iteration of FloodFill
-            y, x = checkList.pop() #Take pixel from checklist, to find qualifying neighbours
+            z, y, x = checkList.pop() #Take pixel from checklist, to find qualifying neighbours
             num_complete += 1 #update count for timer
 
             # BEGIN TIMER UPDATE SECTION [Placement outside FloodFill improves speed (4x fewer divisions for 15 roverMaxSlope)
@@ -369,6 +344,15 @@ def connectedComponents(map, roverMaxSlope=150):
                 # END TIMER UPDATE SECTION
 
             #BEGIN LOCATION SPECIFIC NEIGHBOUR INDEXING
+            if z > 0:
+                zmin = -1
+                if z < (d - 1):
+                    zmax = 2
+                else:
+                    zmax = 1
+            else:
+                zmax = 2
+                zmin = 0
             if x > 0:
                 xmin = 0
                 if x < (w - 1): #middle column
@@ -390,19 +374,162 @@ def connectedComponents(map, roverMaxSlope=150):
             #END LOCATION SPECIFIC NEIGHBOUR INDEXING
 
             #BEGIN NEIGHBOUR TRAVERSABILITY CHECK
-            for i in range(xmin, xmax):
-                for j in range(ymin, ymax): #for all neighbouring pixels
-                    if (j != 1) ^ (i != 1): #not including current pixel
-                        if labels[y+j-1,x+i-1] == 0: #and only considering unlabeled pixels
-                            if np.absolute(map.slopeMap[y][x][i][j]) <= roverMaxSlope: #check if they can be reached from this pixel
-                                #if(map.illuminationMap[y+j-1,x+i-1] == 1) & (map.DTEMap[y+j-1,x+i-1] == 1): #not necessary, already checked in precompute
-                                labels[y+j-1,x+i-1] = nextLabel
-                                checkList.append([y+j-1,x+i-1])
+            for k in range(zmin, zmax):
+                for i in range(xmin, xmax):
+                    for j in range(ymin, ymax): #for all neighbouring pixels
+                        if (((j == 1) & (i == 1) & (k == 0))!=True): #not including current pixel
+                            if labels[z+k,y+j-1,x+i-1] == 0: #and only considering unlabeled pixels
+                                if np.absolute(map.slopeMap[y][x][i][j]) <= roverMaxSlope: #check if they can be reached from this pixel
+                                    #if(map.illuminationMap[y+j-1,x+i-1] == 1) & (map.DTEMap[y+j-1,x+i-1] == 1): #not necessary, already checked in precompute
+                                    labels[z,y+j-1,x+i-1] = nextLabel
+                                    checkList.append([z+k,y+j-1,x+i-1])
             #END NEIGHBOUR TRAVERSABILITY CHECK
         #END FLOODFILL ALGORITHM
         #seeds = np.where(labels == 0) #Reset candidate seeds
     #END CONNECTED COMPONENTS ALGORITHM
     return labels #return labels and count
+
+
+class Node(namedtuple('Node', 'location left_child right_child')):
+    def __repr__(self):
+        return pformat(tuple(self))
+
+
+def kdtree(point_list, depth=0):
+    try:
+        k = len(point_list[0])  # assumes all points have the same dimension
+    except IndexError as e:  # if not point_list:
+        return None
+    # Select axis based on depth so that axis cycles through all valid values
+    axis = depth % k
+
+    # Sort point list and choose median as pivot element
+    point_list.sort(key=itemgetter(axis))
+    median = len(point_list) // 2  # choose median
+
+    # Create node and construct subtrees
+    return Node(
+        location=point_list[median],
+        left_child=kdtree(point_list[:median], depth + 1),
+        right_child=kdtree(point_list[median + 1:], depth + 1)
+    )
+#
+#
+# def ocTree(points):
+#
+#     binDepths = [0] #Initialise
+#
+# def Astar(start, goal, illuminationMap):
+#     d = illuminationMap.shape[0]
+#     h = illuminationMap.shape[1]
+#     w = illuminationMap.shape[2]
+#     #The set of nodes already evaluated
+#     closedSet = []
+#
+#     #The set of currently discovered nodes that are not evaluated yet
+#     #Initially only the start node is known
+#     openSet = [start]
+#
+#     #For each node, which node it can most efficiently be reached from
+#     #If a node can be reached from many nodes, cameFrom will eventually
+#     #contain the most efficient previous step
+#     cameFrom = np.zeros((d,h,w), dType=np.uint32)
+#
+#     #For each node, the cost of getting from the start node to that node
+#     gScore = np.ones((d,h,w), dType=np.int64) * -1
+#
+#     #The cost of going from start to start is zero
+#     gScore[start] = 0
+#
+#     #For each node, the total cost of getting from the start node to the goal
+#     #by passing by that node. THat value is partly known, partly heuristic
+#     fScore := map with default value of Infinity
+#
+#     #For the first node, that value is completely heuristic.
+#     fScore[start] := heuristic_cost_estimate(start,goal)
+#
+#     while openSet is not empty
+#         current := the node in openSet having the lowest fScore[] value
+#         if current = goal
+#             return reconstruct_path(cameFrom, current)
+#
+#         openSet.Remove(current)
+#         closedSet.Add(current)
+#
+#         for each neighbour of current
+#             if neighbour in closedSet
+#                 continue #Ignore the neighbour which is already evaluated
+#
+#             if neighbour not in openSet #Discover a new node
+#                 openSet.Add(neighbour)
+#
+#             #The distance from start to a neighbour
+#             tentative_gScore := gScore[current] + dist_between(current, neighbour)
+#             if tentative_gScore >= gScore[neighbour]
+#                 continue #This is not a better path.
+#             #This path is the best until now. Record it!
+#             cameFrom[neighbour] := current
+#             gScore[neighbour] := tentative_gScore
+#             fScore[neighbour] := gScore[neighbour] + heuristic_cost_estimate(neighbour, goal)
+#     return failure
+#
+# def reconstruct_path(cameFrom, current):
+#     total_path := [current]
+#     while current in cameFrom.Keys:
+#         current := cameFrom[current]
+#         total_path.append(current)
+#     return total_path
+
+def main():
+    #main initialises by loading relevant maps from database
+    maps = [
+            #TraverseMap('imgs/SLDEM2015_256_0N_60N_000_120.jp2',None,None,None,None)
+            TraverseMap('imgs/prototype_plato_crater.jpeg', None, None, None, None)
+        ]
+#    agents =
+    map = random.choice(maps)
+
+    print("Searching for precomputed Region Map")
+    regionMapFilename = 'imgs/regionMap_150-3D.npy'
+    if os.path.isfile(regionMapFilename) is True:
+        print("Region file found: ", regionMapFilename)
+        regionMap = np.int_(np.load(regionMapFilename))
+        regionCounts = np.load('imgs/regionMap_counts_150-3D.npy')
+    else:
+        print("Region file not found, generating Region map")
+        regionMap = np.int_(connectedComponents(map))
+        regionIndices, regionCounts = countPixelsPerRegion_fast(regionMap)
+        np.save(regionMapFilename, regionMap)
+        np.save('imgs/regionMap_counts_150-3D.npy', regionCounts)
+
+
+
+ #   maxRegion = np.where(regionCounts == np.max(regionCounts))
+  #  regionIndices = np.where(regionMap == maxRegion)
+   # z_ind = regionIndices[0]
+   # y_ind = regionIndices[1]
+   # x_ind = regionIndices[2]
+
+    #y_ind, x_ind = np.floor_divide(regionIndices[maxRegion][0], regionMap[0].size), np.modulus(regionIndices[maxRegion][0], regionMap[0].size)
+
+   # im = np.array([[0, 0, 0]], dtype='float64')
+   # im = np.matlib.repmat(im,regionMap.shape[0],regionMap.shape[1]).reshape(regionMap.shape[0],regionMap.shape[1],3)
+   # im[y_ind,x_ind,0] = 1
+   # im = img_as_uint(im)
+   # io.imsave('imgs/test_16bit_150.png', im)
+
+    #a0 = np.array([chr(0) + chr(0) + chr(0)])
+    #data = np.matlib.repmat(a0, regionMap.shape[0], regionMap.shape[1])
+    #im = Image.new("RGB", (regionMap.shape[0], regionMap.shape[1]), "black")
+    #pix = im.load()
+    #pix[y_ind, x_ind] = [chr(255) + chr(0) + chr(0)]
+    #im = Image.frombytes("RGB", (regionMap.shape[0], regionMap.shape[1]), data)
+    #im.
+
+    agent = Agent(map)
+    print(map)
+    print(agent)
+
 
 if __name__ == '__main__':
     main()
