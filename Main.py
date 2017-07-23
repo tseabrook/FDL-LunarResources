@@ -378,10 +378,10 @@ def connectedComponents(map, roverMaxSlope=50):
                 for i in range(xmin, xmax):
                     for j in range(ymin, ymax): #for all neighbouring pixels
                         if (((j == 1) & (i == 1) & (k == 0))!=True): #not including current pixel
-                            if labels[z+k,y+j-1,x+i-1] == 0: #and only considering unlabeled pixels
+                            if valid_pixels[z+k,y+j-1,x+i-1] == True: #and only considering unlabeled pixels
                                 if np.absolute(map.slopeMap[y][x][i][j]) <= roverMaxSlope: #check if they can be reached from this pixel
                                     #if(map.illuminationMap[y+j-1,x+i-1] == 1) & (map.DTEMap[y+j-1,x+i-1] == 1): #not necessary, already checked in precompute
-                                    labels[z,y+j-1,x+i-1] = nextLabel
+                                    labels[z+k,y+j-1,x+i-1] = nextLabel
                                     checkList.append([z+k,y+j-1,x+i-1])
             #END NEIGHBOUR TRAVERSABILITY CHECK
         #END FLOODFILL ALGORITHM
@@ -413,7 +413,7 @@ def kdtree(point_list, depth=0):
         left_child=kdtree(point_list[:median], depth + 1),
         right_child=kdtree(point_list[median + 1:], depth + 1)
     )
-#
+
 #
 # def ocTree(points):
 #
@@ -489,6 +489,9 @@ def main():
 #    agents =
     map = random.choice(maps)
 
+    #kdmap.illuminationMap
+
+
     print("Searching for precomputed Region Map")
     regionMapFilename = 'imgs/regionMap_150-3D.npy'
     if os.path.isfile(regionMapFilename) is True:
@@ -504,19 +507,20 @@ def main():
 
 
 
- #   maxRegion = np.where(regionCounts == np.max(regionCounts))
-  #  regionIndices = np.where(regionMap == maxRegion)
-   # z_ind = regionIndices[0]
-   # y_ind = regionIndices[1]
-   # x_ind = regionIndices[2]
+    maxRegion = np.where(regionCounts == np.max(regionCounts))
+    regionIndices = np.where(regionMap == maxRegion)
+    #z_ind = regionIndices[0]
+    y_ind = regionIndices[1]
+    x_ind = regionIndices[2]
 
     #y_ind, x_ind = np.floor_divide(regionIndices[maxRegion][0], regionMap[0].size), np.modulus(regionIndices[maxRegion][0], regionMap[0].size)
 
-   # im = np.array([[0, 0, 0]], dtype='float64')
-   # im = np.matlib.repmat(im,regionMap.shape[0],regionMap.shape[1]).reshape(regionMap.shape[0],regionMap.shape[1],3)
-   # im[y_ind,x_ind,0] = 1
-   # im = img_as_uint(im)
-   # io.imsave('imgs/test_16bit_150.png', im)
+    for i in range(regionMap.shape[0]):
+        im = np.array([[0, 0, 0]], dtype='float64')
+        im = np.matlib.repmat(im,regionMap[i].shape[0],regionMap[i].shape[1]).reshape(regionMap[i].shape[0],regionMap[i].shape[1],3)
+        im[y_ind,x_ind,0] = 1
+        im = img_as_uint(im)
+        io.imsave('imgs/connectedRegion_8bit_'+i+'.png', im)
 
     #a0 = np.array([chr(0) + chr(0) + chr(0)])
     #data = np.matlib.repmat(a0, regionMap.shape[0], regionMap.shape[1])
