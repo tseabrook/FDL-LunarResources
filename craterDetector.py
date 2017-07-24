@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import math
 
 from skimage import data, color
 from skimage.transform import hough_circle, hough_circle_peaks
@@ -8,10 +9,9 @@ from skimage.draw import circle_perimeter
 from skimage.util import img_as_ubyte
 from scipy.sparse import csr_matrix
 
-from split_and_merge import split_and_merge
+from split_and_merge import split_and_merge, line_of_best_fit
 
 import glymur
-
 
 
 def edgeCluster(edges, max_step):
@@ -103,16 +103,18 @@ def edgeCluster(edges, max_step):
 
 
 filename = 'imgs/testdata/m108898482_cdr_jp2_p'
+hypothesis = 4
 
-for i in range(64):
-    curr_filename = filename+str(i+1)+'.jp2'
+
+for n in range(64):
+    curr_filename = filename+str(n+1)+'.jp2'
 
 
     # Load picture and detect edges
     image = glymur.Jp2k(curr_filename)[:]
     # Low threshold and High threshold represent number of pixels that may be skipped to make a line [4, 60 seems good]
     # Sigma represents the width of the guassian smoothing kernel [3 seems good]
-    edges = canny(image, sigma=3, low_threshold=4, high_threshold=60)
+    edges = canny(image, sigma=3, low_threshold=4, high_threshold=50)
     #fig, axarr = plt.subplots(ncols=2, nrows=1, figsize=(10, 4))
     #axarr[1].imshow(image, cmap=plt.cm.gray)
     #plt.show()
@@ -134,8 +136,8 @@ for i in range(64):
     axarr[0].imshow(edges, cmap=plt.cm.gray)
     axarr[1].imshow(image, cmap=plt.cm.gray)
     axarr[1].set_color_cycle([cm(1. * i / 20) for i in range(20)])
-    for data in lines:
-        y, x = data
+    for i in range(1,len(lines)):
+        y, x = lines[i]
         axarr[1].scatter(x, y, alpha=0.8, edgecolors='none', s=1)
 
 
@@ -179,92 +181,600 @@ for i in range(64):
                 x2 = maxX
                 #x2 = maxX + np.minimum(edges.shape[0] - maxX,3) (Hypo 1)
                 if(segments[j].slope[0] > 0):
-                    y1 = (np.multiply(segments[j].slope[0][0], x1) + segments[j].intercept)
-                    y2 = (np.multiply(segments[j].slope[0][0], x2) + segments[j].intercept)
+                    y1 = int(math.floor(np.multiply(segments[j].slope[0][0], x1) + segments[j].intercept))
+                    y2 = int(math.ceil(np.multiply(segments[j].slope[0][0], x2) + segments[j].intercept))
                 else:
-                    y2 = (np.multiply(segments[j].slope[0][0], x1) + segments[j].intercept)
-                    y1 = (np.multiply(segments[j].slope[0][0], x2) + segments[j].intercept)
+                    y2 = int(math.ceil(np.multiply(segments[j].slope[0][0], x1) + segments[j].intercept))
+                    y1 = int(math.floor(np.multiply(segments[j].slope[0][0], x2) + segments[j].intercept))
             else:
                 y1 = minY
                 #y1 = minY - np.minimum(minY,3) (Hypo 1)
                 y2 = maxY
                 #y2 = maxY + np.minimum(edges.shape[1] - maxY,3) (Hypo 1)
                 if(segments[j].slope[0] > 0):
-                    x1 = (np.divide((y1 - segments[j].intercept),segments[j].slope[0][0]))
-                    x2 = (np.divide((y2 - segments[j].intercept), segments[j].slope[0][0]))
+                    x1 = int(math.floor(np.divide((y1 - segments[j].intercept),segments[j].slope[0][0])))
+                    x2 = int(math.ceil(np.divide((y2 - segments[j].intercept), segments[j].slope[0][0])))
                 else:
-                    x2 = (np.divide((y1 - segments[j].intercept),segments[j].slope[0][0]))
-                    x1 = (np.divide((y2 - segments[j].intercept), segments[j].slope[0][0]))
+                    x2 = int(math.ceil(np.divide((y1 - segments[j].intercept),segments[j].slope[0][0])))
+                    x1 = int(math.floor(np.divide((y2 - segments[j].intercept), segments[j].slope[0][0])))
 
             segments[j].min[0], segments[j].min[1] = x1, y1
             segments[j].max[0], segments[j].max[1] = x2, y2
+            if(segments[j].slope[0] > 0):
+                segments[j].start[0], segments[j].start[1] = x1, y1
+                segments[j].end[0], segments[j].end[1] = x2, y2
+            else:
+                segments[j].start[0], segments[j].start[1] = x1, y2
+                segments[j].end[0], segments[j].end[1] = x2, y1
+
 
         #We want to encourage lines to intersect
         #However, we don't want this to happen arbitrarily
     #Hypothesis 2
+        # proposal: where two lines can intersect if extended by max((end-mean/2),max_extend)
+        #           they should be
+        # result: decent, large lines extend too far, most 'easy' craters get captured.
+        # conclusion: distance between ends of lines is probably better than distance to intersection
+        #
         #If a line can be extended to intersect another, within the bounds of the others data points
         #Then it should do so.
-        for j in range(first, last):
-            for k in range(first,last):
-                if(j < k):
-                    #Do these lines intersect?
-                    if(segments[j].slope[0] == segments[k].slope[0]):
-                        #They never intersect
-                        intersect = False
-                    else:
-                        #They intersect at [x_cross, y_cross]
-                        #a1x + b1 = a2x + b2
-                        #(a1 - a2)x = (b2 - b1)
-                        #x = (b2-b1)/(a1-a2)
-                        x_cross = np.divide((segments[k].intercept - segments[j].intercept),\
-                                        (segments[j].slope[0] - segments[k].slope[0]))
-                        #y = ax + b
-                        y_cross = np.multiply(segments[j].slope[0], x_cross) + segments[j].intercept
-
-                        #Does line j intersect line k within the data segment?
-                        if ((x_cross < segments[k].max[0]) & (x_cross > segments[k].min[0])):
-                            # Yes
-                            intersect = True
-                            # Extend line j to intersect line k
-                            if (x_cross > segments[j].max[0]):
-                                segments[j].max[0] = x_cross
-                                if segments[j].slope[0] >= 0:
-                                    segments[j].max[1] = y_cross
-                                else:
-                                    segments[j].min[1] = y_cross
-                            else:
-                                if (x_cross < segments[j].min[0]):
-                                    segments[j].min[0] = x_cross
-                                    if segments[j].slope[0] >= 0:
-                                        segments[j].min[1] = y_cross
-                                    else:
-                                        segments[j].max[1] = y_cross
-                                #else:
-                                #They already intersect
+        #Max extension (in x) permissible for each of two lines to intersect
+##############################################################################
+        if(hypothesis == 2):
+            max_extend = 5
+            for j in range(first, last):
+                for k in range(first,last):
+                    if(j < k):
+                        #Do these lines intersect?
+                        if(segments[j].slope[0] == segments[k].slope[0]):
+                            #They never intersect
+                            intersect = False
                         else:
-                            #Does line k intersect line j within the data segment?
-                            if ((x_cross < segments[j].max[0]) & (x_cross > segments[j].min[0])):
-                                #Yes
-                                intersect = True
-                                #Extend line k to intersect line j
-                                if(x_cross > segments[k].max[0]):
-                                    segments[k].max[0] = x_cross
-                                    if(segments[k].slope[0] >= 0):
-                                        segments[k].max[1] = y_cross
-                                    else:
-                                        segments[k].min[1] = y_cross
-                                else:
-                                    if(x_cross < segments[k].min[0]):
-                                        segments[k].min[0] = x_cross
-                                        if(segments[k].slope[0] >= 0):
-                                            segments[k].min[1] = y_cross
-                                        else:
-                                            segments[k].max[1] = y_cross                                    #else:
-                                    #They already intersect
-                            else:
-                                intersect = False
+                            #They intersect at [x_cross, y_cross]
+                            #a1x + b1 = a2x + b2
+                            #(a1 - a2)x = (b2 - b1)
+                            #x = (b2-b1)/(a1-a2)
+                            x_cross = np.divide((segments[k].intercept - segments[j].intercept),\
+                                            (segments[j].slope[0] - segments[k].slope[0]))
+                            #y = ax + b
+                            y_cross = np.multiply(segments[j].slope[0], x_cross) + segments[j].intercept
 
-        #y1 = (np.multiply(line.slope, minX) + line.intercept)[0][0]
+                            #Check that intersection point lies within bounds of map
+                            if((x_cross > 0) & (x_cross < edges.shape[0]) & (y_cross > 0) & (y_cross < edges.shape[1])):
+                                #If x_cross is outside of segment j's maximal bounds
+                                if (x_cross > segments[j].max[0]):
+                                    #check that x_cross is close enough to j to warrant intersection
+                                    if ((x_cross - segments[j].max[0]) < np.maximum(np.multiply(0.5,(
+                                                np.max(segments[j].data[0]) - segments[j].mean[0])),max_extend)):
+                                        #If x_cross is outside of segment k's maximals bounds
+                                        if (x_cross > segments[k].max[0]):
+                                            # check that x_cross is close enough to k to warrant intersection
+                                            if ((x_cross - segments[k].max[0]) < np.maximum(np.multiply(0.5, (
+                                                    np.max(segments[k].data[0]) - segments[k].mean[0])), max_extend)):
+                                                #If it is, update k(max)
+                                                segments[k].max[0] = x_cross
+                                                if (segments[k].slope[0] >= 0):
+                                                    segments[k].max[1] = y_cross
+                                                else:
+                                                    segments[k].min[1] = y_cross
+                                                #update j(max)
+                                                segments[j].max[0] = x_cross
+                                                if segments[j].slope[0] >= 0:
+                                                    segments[j].max[1] = y_cross
+                                                else:
+                                                    segments[j].min[1] = y_cross
+                                        else:
+                                            # If x_cross is outside of segment k's minimal bounds
+                                            if (x_cross < segments[k].min[0]):
+                                                # check that x_cross is close enough to k to warrant intersection
+                                                if ((segments[k].min[0] - x_cross) < np.maximum(np.multiply(0.5, (
+                                                        segments[k].mean[0] - np.min(segments[k].data[0]))),max_extend)):
+                                                    # If it is, update k(min)
+                                                    segments[k].min[0] = x_cross
+                                                    if (segments[k].slope[0] >= 0):
+                                                        segments[k].min[1] = y_cross
+                                                    else:
+                                                        segments[k].max[1] = y_cross
+                                                    #update j(max)
+                                                    segments[j].max[0] = x_cross
+                                                    if segments[j].slope[0] >= 0:
+                                                        segments[j].max[1] = y_cross
+                                                    else:
+                                                        segments[j].min[1] = y_cross
+                                            else: #x_cross is within bounds of k
+                                                # update j(max)
+                                                segments[j].max[0] = x_cross
+                                                if segments[j].slope[0] >= 0:
+                                                    segments[j].max[1] = y_cross
+                                                else:
+                                                    segments[j].min[1] = y_cross
+                                else:
+                                    # If x_cross is outside of segment j's minimal bounds
+                                    if (x_cross < segments[j].min[0]):
+                                        # check that x_cross is close enough to j to warrant intersection
+                                        if((segments[j].min[0] - x_cross) < np.maximum(np.multiply(0.5,(
+                                                    segments[j].mean[0] - np.min(segments[j].data[0]))),max_extend)):
+                                            # If x_cross is outside of segment k's maximal bounds
+                                            if (x_cross > segments[k].max[0]):
+                                                # check that x_cross is close enough to k to warrant intersection
+                                                if ((x_cross - segments[k].max[0]) < np.maximum(np.multiply(0.5,(
+                                                        np.max(segments[k].data[0]) - segments[k].mean[0])),max_extend)):
+                                                    # If it is, update k(max)
+                                                    segments[k].max[0] = x_cross
+                                                    if (segments[k].slope[0] >= 0):
+                                                        segments[k].max[1] = y_cross
+                                                    else:
+                                                        segments[k].min[1] = y_cross
+                                                    # update j(min)
+                                                    segments[j].min[0] = x_cross
+                                                    if segments[j].slope[0] >= 0:
+                                                        segments[j].min[1] = y_cross
+                                                    else:
+                                                        segments[j].max[1] = y_cross
+                                            else:
+                                                # If x_cross is outside of segment k's minimal bounds
+                                                if (x_cross < segments[k].min[0]):
+                                                    # check that x_cross is close enough to k to warrant intersection
+                                                    if ((segments[k].min[0] - x_cross) < np.maximum(np.multiply(0.5, (
+                                                                segments[k].mean[0] - np.min(segments[k].data[0]))), max_extend)):
+                                                        # If it is, update k(min)
+                                                        segments[k].min[0] = x_cross
+                                                        if (segments[k].slope[0] >= 0):
+                                                            segments[k].min[1] = y_cross
+                                                        else:
+                                                            segments[k].max[1] = y_cross
+                                                        # update j(min)
+                                                        segments[j].min[0] = x_cross
+                                                        if segments[j].slope[0] >= 0:
+                                                            segments[j].min[1] = y_cross
+                                                        else:
+                                                            segments[j].max[1] = y_cross
+                                                else: #x_cross is within bounds of k
+                                                    # update j(max)
+                                                    segments[j].min[0] = x_cross
+                                                    if segments[j].slope[0] >= 0:
+                                                        segments[j].min[1] = y_cross
+                                                    else:
+                                                        segments[j].max[1] = y_cross
+                                    else: #x_cross is within bounds of j
+                                        # If x_cross is outside of segment k's maximals bounds
+                                        if (x_cross > segments[k].max[0]):
+                                            # check that x_cross is close enough to k to warrant intersection
+                                            if ((x_cross - segments[k].max[0]) < np.maximum(np.multiply(0.5,
+                                                (np.max(segments[k].data[0]) - segments[k].mean[0])), max_extend)):
+                                                # If it is, update k(max)
+                                                segments[k].max[0] = x_cross
+                                                if (segments[k].slope[0] >= 0):
+                                                    segments[k].max[1] = y_cross
+                                                else:
+                                                    segments[k].min[1] = y_cross
+                                        else:
+                                            # If x_cross is outside of segment k's minimal bounds
+                                            if (x_cross < segments[k].min[0]):
+                                                # check that x_cross is close enough to k to warrant intersection
+                                                if ((segments[k].min[0] - x_cross) < np.maximum(np.multiply(0.5, (
+                                                            segments[k].mean[0] - np.min(segments[k].data[0]))), max_extend)):
+                                                    # If it is, update k(min)
+                                                    segments[k].min[0] = x_cross
+                                                    if (segments[k].slope[0] >= 0):
+                                                        segments[k].min[1] = y_cross
+                                                    else:
+                                                        segments[k].max[1] = y_cross
+                                            #else:  # x_cross is within bounds of k
+##############################################################################
+        if(hypothesis == 3):
+            max_extend = 6
+            changeFlag = True
+            connected = np.zeros((last - first, last - first), dtype=bool)
+            while(changeFlag):
+                changeFlag = False
+                for j in range(first, last):
+                    for k in range(first,last):
+                        if(j < k):
+                            if(connected[j-first,k-first] == False):
+                                #First, do these lines already intersect?
+                                if (segments[j].slope[0] == segments[k].slope[0]):
+                                    # They never intersect
+                                    intersect = False
+                                else:
+                                    x_cross = np.divide((segments[k].intercept[0] - segments[j].intercept[0]),
+                                                        (segments[j].slope[0] - segments[k].slope[0]))
+                                    # y = ax + b
+                                    y_cross = np.multiply(segments[j].slope[0], x_cross) + segments[j].intercept[0]
+                                    intersect = False
+                                    #if((x_cross > segments[k].min[0]) & (x_cross > segments[j].min[0])
+                                    #        & (x_cross < segments[k].max[0]) & (x_cross < segments[j].max[0])):
+                                    #    intersect = True
+                                    #    connected[j-first,k-first] = True
+                                    #    connected[k-first,j-first] = True
+                                if(intersect == False):
+                                    #Are the ends of these lines close together?
+                                    distance = np.zeros(4)
+                                    #min -> min
+                                    distance[0] = np.sqrt(np.sum((np.power(segments[j].start[0] - segments[k].start[0],2),
+                                        np.power((segments[j].start[1] - segments[k].start[1]), 2))))
+                                    #min -> max
+                                    distance[1] = np.sqrt(np.sum((np.power((segments[j].start[0] - segments[k].end[0]),2),
+                                        np.power((segments[j].start[1] - segments[k].end[1]), 2))))
+                                    #max -> min
+                                    distance[2] = np.sqrt(np.sum((np.power((segments[j].end[0] - segments[k].start[0]),2),
+                                        np.power((segments[j].end[1] - segments[k].start[1]), 2))))
+                                    #max -> max
+                                    distance[3] = np.sqrt(np.sum((np.power((segments[j].end[0] - segments[k].end[0]),2),
+                                        np.power((segments[j].end[1] - segments[k].end[1]), 2))))
+                                    ind = np.argmin(distance)
+                                    if distance[ind] < max_extend:
+                                        if(distance[ind] == 0):
+                                            connected[j - first, k - first] = True
+                                            connected[k - first, j - first] = True
+                                        else:
+                                            changeFlag = True
+                                            switcher = {
+                                                0: [[segments[j].start[0], segments[j].start[1]], [segments[k].start[0], segments[k].start[1]]],
+                                                1: [[segments[j].start[0], segments[j].start[1]], [segments[k].end[0], segments[k].end[1]]],
+                                                2: [[segments[j].end[0], segments[j].end[1]], [segments[k].start[0], segments[k].start[1]]],
+                                                3: [[segments[j].end[0], segments[j].end[1]], [segments[k].end[0], segments[k].end[1]]],
+                                            }
+                                            data = switcher.get(ind)
+                                            connected[j - first, k - first] = True
+                                            connected[k - first, j - first] = True
+                                            segments = np.insert(segments, last, line_of_best_fit(data))
+                                            segments[last].start = [data[0][0], data[0][1]]
+                                            segments[last].end = [data[1][0], data[1][1]]
+                                            segmentParent[i:] = segmentParent[i:]+1
+##############################################################################
+        if (hypothesis == 4):
+            big_number = 9999999999999
+            max_extend = 6
+            connected_lines = np.zeros(last - first,dtype=bool)
+            connected = np.zeros((last-first, last-first),dtype=bool)
+            for j in range(first, last):
+                for k in range(first, last):
+                    if (j < k):
+                        # First, do these lines already intersect?
+                        if (segments[j].slope[0] == segments[k].slope[0]):
+                            # They never intersect, but could connect
+                            if(segments[j].intercept[0] == segments[k].intercept[0]):
+                                #They are on the same line
+                                #Only need to check x value equality, since lines are parallel
+                                if(((segments[j].start[0] >= segments[k].start[0])
+                                    & (segments[j].start[0] <= segments[k].end[0]))
+                                    ^ ((segments[j].start[0] >= segments[k].end[0])
+                                    & (segments[j].start[0] <= segments[k].start[0]))):
+                                    segments[j].start_connect = k
+                                    connected[j-first, k-first] = True
+                                    connected[k-first, j-first] = True
+                                if (((segments[j].end[0] >= segments[k].start[0])
+                                    & (segments[j].end[0] <= segments[k].end[0]))
+                                    ^ ((segments[j].end[0] >= segments[k].end[0])
+                                    & (segments[j].end[0] <= segments[k].start[0]))):
+                                    segments[j].end_connect = k
+                                    connected[j-first, k-first] = True
+                                    connected[k-first, j-first] = True
+                                if (((segments[k].start[0] >= segments[j].start[0])
+                                    & (segments[k].start[0] <= segments[j].end[0]))
+                                    ^ ((segments[k].start[0] >= segments[j].end[0])
+                                    & (segments[k].start[0] <= segments[j].start[0]))):
+                                    segments[k].start_connect = j
+                                    connected[j-first, k-first] = True
+                                    connected[k-first, j-first] = True
+                                if (((segments[k].end[0] >= segments[j].start[0])
+                                    & (segments[k].end[0] <= segments[j].end[0]))
+                                    ^ ((segments[k].end[0] >= segments[j].end[0])
+                                    & (segments[k].end[0] <= segments[j].start[0]))):
+                                    segments[k].end_connect = j
+                                    connected[j-first, k-first] = True
+                                    connected[k-first, j-first] = True
+
+                                # The next pair of conditions should NEVER occur
+                                # However, the check has been included for sanity
+                                if((segments[j].end_connect == k)
+                                    & (segments[j].start_connect == k)):
+                                        #(Line j < Line k) ^ (Line j = Line k)
+                                        np.delete(segments, j, 0)
+                                        last = last - 1
+                                        segmentParent[i:] = segmentParent[i:] + -1
+                                        np.delete(connected_lines, j-first, 0)
+                                        np.delete(connected, j-first, 0)
+                                        np.delete(connected, j-first, 1)
+                                else:
+                                    if ((segments[k].end_connect == j)
+                                        & (segments[k].start_connect == j)):
+                                        #Line k < Line j
+                                        np.delete(segments, k, 0)
+                                        last = last - 1
+                                        segmentParent[i:] = segmentParent[i:] + -1
+                                        np.delete(connected_lines, k-first, 0)
+                                        np.delete(connected, k-first, 0)
+                                        np.delete(connected, k-first, 1)
+
+                        #The lines are not parallel, continue intersection check
+                        else:
+                            # x = (b2 - b1)/(a1 - a2)
+                            x_cross = np.rint(np.divide(
+                                (segments[k].intercept[0] - segments[j].intercept[0]),
+                                (segments[j].slope[0] - segments[k].slope[0])))
+
+                            #This introduces bugs due to errors introduced through division
+                            #Rounding could help, but the direction of rounding would need to be know
+
+                            #if ((x_cross >= segments[k].min[0]) & (x_cross >= segments[j].min[0])
+                            #        & (x_cross <= segments[k].max[0]) & (x_cross <= segments[j].max[0])):
+                            #    #Lines intersect!
+                            #    #But where...?
+                            #    if(abs(segments[k].end[0] - x_cross) < abs(segments[k].start[0] - x_cross)):
+                            #        segments[k].end_connect = j
+                            #    else:
+                            #        segments[k].start_connect = j
+                            #    if(abs(segments[j].end[0] - x_cross) < abs(segments[j].start[0] - x_cross)):
+                            #        segments[j].end_connect = k
+                            #    else:
+                            #        segments[j].start_connect = k
+                            #    connected[j-first,k-first] = True
+                            #    connected[k-first,j-first] = True
+
+            #If start and end of line is connected, then do not connect them again
+            for j in range(first, last):
+                if ((segments[j].start_connect >= 0) &  (segments[j].end_connect >= 0)):
+                    connected_lines[j-first] = True
+
+            #Find lines that haven't been fully connected yet
+            unconnected = np.where(connected_lines == False)[0]+first
+            num_lines = unconnected.shape[0]
+
+            #Build adjacency matrix for lines that haven't been connected
+            line_adjacency = np.zeros((num_lines, num_lines,4), dtype=float)
+
+            #For lines that haven't been fully connected...
+            for j in range(num_lines):
+                for k in range(num_lines):
+                    if j < k:
+                        #Not considering joined pairs of partially connected lines
+                        if(connected[j,k] == True):
+                            line_adjacency[j,k,0] = big_number
+                            line_adjacency[j,k,1] = big_number
+                            line_adjacency[j,k,2] = big_number
+                            line_adjacency[j,k,3] = big_number
+                        else:
+                            #Measure the distance between the ends of the lines
+                            #Ensure that lines are unconnected before measuring distance
+                            # start -> start
+                            if((segments[unconnected[j]].start_connect < 0) & (segments[unconnected[k]].start_connect < 0)):
+                                line_adjacency[j,k,0] = np.sqrt(np.sum(
+                                    (np.power(segments[unconnected[j]].start[0] - segments[unconnected[k]].start[0], 2),
+                                    np.power((segments[unconnected[j]].start[1] - segments[unconnected[k]].start[1]), 2))))
+                            else:
+                                line_adjacency[j,k,0] = big_number
+                            # start -> end
+                            if((segments[unconnected[j]].start_connect < 0) & (segments[unconnected[k]].end_connect < 0)):
+                                line_adjacency[j,k,1] = np.sqrt(np.sum(
+                                    (np.power((segments[unconnected[j]].start[0] - segments[unconnected[k]].end[0]), 2),
+                                     np.power((segments[unconnected[j]].start[1] - segments[unconnected[k]].end[1]), 2))))
+                            else:
+                                line_adjacency[j,k,1] = big_number
+                            # end -> start
+                            if((segments[unconnected[j]].end_connect < 0) & (segments[unconnected[k]].start_connect < 0)):
+                                line_adjacency[j,k,2] = np.sqrt(np.sum(
+                                    (np.power((segments[unconnected[j]].end[0] - segments[unconnected[k]].start[0]), 2),
+                                    np.power((segments[unconnected[j]].end[1] - segments[unconnected[k]].start[1]), 2))))
+                            else:
+                                line_adjacency[j,k,2] = big_number
+                            # end -> end
+                            if((segments[unconnected[j]].end_connect < 0) & (segments[unconnected[k]].start_connect < 0)):
+                                line_adjacency[j,k,3] = np.sqrt(np.sum(
+                                    (np.power((segments[unconnected[j]].end[0] - segments[unconnected[k]].end[0]), 2),
+                                    np.power((segments[unconnected[j]].end[1] - segments[unconnected[k]].end[1]),2))))
+                            else:
+                                line_adjacency[j,k,3] = big_number
+
+
+                    else:
+                        if(j == k):
+                            line_adjacency[j, k, 0] = big_number
+                            line_adjacency[j, k, 1] = big_number
+                            line_adjacency[j, k, 2] = big_number
+                            line_adjacency[j, k, 3] = big_number
+                        else:
+                            # If line has already been processed, copy distance values
+                            line_adjacency[j, k,0] = line_adjacency[k, j,0]
+                            line_adjacency[j, k,1] = line_adjacency[k, j,2]
+                            line_adjacency[j, k,2] = line_adjacency[k, j,1]
+                            line_adjacency[j, k,3] = line_adjacency[k, j,3]
+
+            connect_flag = True
+            l = 0
+            #Whilst there are still partially connected lines less than [max_extend] distance apart
+            while(connect_flag == True):
+                #Find the shortest distance (greedy strategy)
+                # argmin gives flatIndex,
+                #   use unravel_index with array shape to return 3d index
+                #If the shortest distance is acceptable
+                if line_adjacency.size == 0:
+                    connect_flag = False
+                else:
+                    j, k, l = np.unravel_index(np.argmin(line_adjacency), line_adjacency.shape)
+                    if line_adjacency[j,k,l] < max_extend:
+                        if(line_adjacency[j,k,l] == 0):
+                            if (l == 0):
+                                segments[unconnected[j]].start_connect = k
+                                segments[unconnected[k]].start_connect = j
+                            else:
+                                if (l == 1):
+                                    segments[unconnected[j]].start_connect = k
+                                    segments[unconnected[k]].end_connect = j
+                                else:
+                                    if (l == 2):
+                                        segments[unconnected[j]].end_connect = k
+                                        segments[unconnected[k]].start_connect = j
+                                    else:
+                                        segments[unconnected[j]].end_connect = k
+                                        segments[unconnected[k]].end_connect = j
+
+                            connected[k, j] = True
+                            connected[j, k] = True
+                            line_adjacency[j, k, :] = big_number
+                            line_adjacency[k, j, :] = big_number
+
+                        else:
+                            switcher = {
+                                0: [[segments[unconnected[j]].start[0], segments[unconnected[j]].start[1]],
+                                    [segments[unconnected[k]].start[0], segments[unconnected[k]].start[1]]],
+                                1: [[segments[unconnected[j]].start[0], segments[unconnected[j]].start[1]],
+                                    [segments[unconnected[k]].end[0], segments[unconnected[k]].end[1]]],
+                                2: [[segments[unconnected[j]].end[0], segments[unconnected[j]].end[1]],
+                                    [segments[unconnected[k]].start[0], segments[unconnected[k]].start[1]]],
+                                3: [[segments[unconnected[j]].end[0], segments[unconnected[j]].end[1]],
+                                    [segments[unconnected[k]].end[0], segments[unconnected[k]].end[1]]],
+                            }
+                            data = switcher.get(l)
+                            #Create a new line to bridge the distance
+                            segments = np.insert(segments, last, line_of_best_fit(data))
+                            segments[last].start = [data[0][0], data[0][1]]
+                            segments[last].end = [data[1][0], data[1][1]]
+                            segments[last].min[0] = np.minimum(data[0][0], data[1][0])
+                            segments[last].min[1] = np.minimum(data[0][1], data[1][1])
+                            segments[last].max[0] = np.maximum(data[0][0], data[1][0])
+                            segments[last].max[1] = np.maximum(data[0][1], data[1][1])
+                            segments[last].start_connect = unconnected[j]
+                            segments[last].end_connect = unconnected[k]
+                            segmentParent[i:] = segmentParent[i:] + 1
+                            connected[k,j] = True
+                            connected[j,k] = True
+
+                            if (l == 0):
+                                segments[unconnected[j]].start_connect = last
+                                segments[unconnected[k]].start_connect = last
+                                #Start and Start
+                                line_adjacency[j,:,0], line_adjacency[j,:,1] = big_number, big_number
+                                line_adjacency[k,:,0], line_adjacency[k,:,1] = big_number, big_number
+                                line_adjacency[:,j,0], line_adjacency[:,j,2] = big_number, big_number
+                                line_adjacency[:,k,0], line_adjacency[:,k,2] = big_number, big_number,
+                            else:
+                                if (l == 1):
+                                    segments[unconnected[j]].start_connect = last
+                                    segments[unconnected[k]].end_connect = last
+                                    #Start and End
+                                    line_adjacency[j, :, 0], line_adjacency[j, :, 1] = big_number, big_number
+                                    line_adjacency[k, :, 2], line_adjacency[k, :, 3] = big_number, big_number
+                                    line_adjacency[:, j, 0], line_adjacency[:, j, 2] = big_number, big_number
+                                    line_adjacency[:, k, 1], line_adjacency[:, k, 3] = big_number, big_number
+                                else:
+                                    if (l == 2):
+                                        segments[unconnected[j]].end_connect = last
+                                        segments[unconnected[k]].start_connect = last
+                                        #End and Start
+                                        line_adjacency[j, :, 2], line_adjacency[j, :, 3] = big_number, big_number
+                                        line_adjacency[k, :, 0], line_adjacency[k, :, 1] = big_number, big_number
+                                        line_adjacency[:, j, 1], line_adjacency[:, j, 3] = big_number, big_number
+                                        line_adjacency[:, k, 0], line_adjacency[:, k, 2] = big_number, big_number
+                                    else:
+                                        segments[unconnected[j]].end_connect = last
+                                        segments[unconnected[k]].end_connect = last
+                                        #End and End
+                                        line_adjacency[j, :, 2], line_adjacency[j, :, 3] = big_number, big_number
+                                        line_adjacency[k, :, 2], line_adjacency[k, :, 3] = big_number, big_number
+                                        line_adjacency[:, j, 1], line_adjacency[:, j, 3] = big_number, big_number
+                                        line_adjacency[:, k, 1], line_adjacency[:, k, 3] = big_number, big_number
+
+                            last = last + 1
+
+                        if ((segments[unconnected[j]].start_connect >= 0) & (segments[unconnected[j]].end_connect >= 0)):
+                            connected_lines[j] = True
+                            unconnected = np.delete(unconnected, j, 0)
+                            line_adjacency = np.delete(line_adjacency, j, 0)
+                            line_adjacency = np.delete(line_adjacency, j, 1)
+                            num_lines = num_lines - 1
+                            if(k > j):
+                                k = k - 1
+
+                        if ((segments[unconnected[k]].start_connect >= 0) & (segments[unconnected[k]].end_connect >= 0)):
+                            connected_lines[k] = True
+                            unconnected = np.delete(unconnected, k, 0)
+                            line_adjacency = np.delete(line_adjacency, k, 0)
+                            line_adjacency = np.delete(line_adjacency, k, 1)
+                            num_lines = num_lines - 1
+
+                    else:
+                        connect_flag = False
+
+            #Now there are only partially connected lines remaining
+            #We should see if these can connect to any nearby
+            num_remain = len(unconnected)
+            #unconnected have been being deleted upon connection during previous step
+            old_last = connected.shape[0]
+            #old_last represents how many segments there were prior to the previous step
+            # (which added new segments and changed the last count - can be fixed)
+            line_adjacency = np.zeros((num_remain, old_last))
+            #max_extend = 10
+            ########################### THERE IS A BUG IN HERE SOMEWHERE -- CONNECTIONS NOT BEING MADE #################
+            for j in range(num_remain):
+                for k in range(old_last):
+                    #Cannot connect to self
+                    if(unconnected[j]-first != k):
+                        #Cannot reconnect over previously connections
+                        if(connected[unconnected[j]-first,k] == True):
+                            line_adjacency[j,k] = big_number
+                        else:
+                            #Measure distance to all other ends of lines
+                            distance = np.zeros(4)
+
+                            #Check if the 'start' end of this line is free
+                            if(segments[unconnected[j]].start_connect == False):
+                                # start -> start distance
+                                distance[0] = np.sqrt(np.sum((np.power(segments[unconnected[j]].start[0] - segments[k+first].start[0], 2),
+                                                        np.power((segments[unconnected[j]].start[1] - segments[k+first].start[1]), 2))))
+                                # start -> end distance
+                                distance[1] = np.sqrt(np.sum((np.power((segments[unconnected[j]].start[0] - segments[k+first].end[0]), 2),
+                                                        np.power((segments[unconnected[j]].start[1] - segments[k+first].end[1]), 2))))
+                            else: #Not available, make infeasible
+                                distance[0] = big_number
+                                distance[1] = big_number
+                            #Check if the 'end' end of this line is free
+                            if (segments[unconnected[j]].end_connect == False):
+                                # end -> start distance
+                                distance[2] = np.sqrt(np.sum((np.power((segments[unconnected[j]].end[0] - segments[k+first].start[0]), 2),
+                                                              np.power((segments[unconnected[j]].end[1] - segments[k+first].start[1]), 2))))
+                                # end -> end distance
+                                distance[3] = np.sqrt(np.sum((np.power((segments[unconnected[j]].end[0] - segments[k+first].end[0]), 2),
+                                                              np.power((segments[unconnected[j]].end[1] - segments[k+first].end[1]), 2))))
+                            else: #Not available, make infeasible
+                                distance[2] = big_number
+                                distance[3] = big_number
+                            ind = np.argmin(distance)
+                            #If shortest distance is below threshold, make connection
+                            if distance[ind] < max_extend:
+                                if (distance[ind] == 0): #If shortest distance indicates prior connection, form connection formally
+                                    connected[unconnected[j] - first, k] = True
+                                    connected[k, unconnected[j] - first] = True
+                                else:
+                                    changeFlag = True
+                                    switcher = {
+                                        0: [[segments[unconnected[j]].start[0], segments[unconnected[j]].start[1]],
+                                            [segments[k+first].start[0], segments[k+first].start[1]]],
+                                        1: [[segments[unconnected[j]].start[0], segments[unconnected[j]].start[1]],
+                                            [segments[k+first].end[0], segments[k+first].end[1]]],
+                                        2: [[segments[unconnected[j]].end[0], segments[unconnected[j]].end[1]],
+                                            [segments[k+first].start[0], segments[k+first].start[1]]],
+                                        3: [[segments[unconnected[j]].end[0], segments[unconnected[j]].end[1]],
+                                            [segments[k+first].end[0], segments[k+first].end[1]]],
+                                    }
+                                    data = switcher.get(ind) #Grab ends of new line used to bridge gap
+                                    connected[unconnected[j] - first, k] = True
+                                    connected[k, unconnected[j] - first] = True
+                                    segments = np.insert(segments, last, line_of_best_fit(data)) #Generate new line
+                                    segments[last].start = [data[0][0], data[0][1]]
+                                    segments[last].end = [data[1][0], data[1][1]]
+                                    segmentParent[i:] = segmentParent[i:] + 1
+                                    if((ind == 0) ^ (ind == 1)):
+                                        segments[unconnected[j]].start_connect = last
+                                    else:
+                                        if((ind == 2) ^ (ind == 3)):
+                                            segments[unconnected[j]].end_connect = last
+                                    last = last + 1
+
+
+
+                                        #y1 = (np.multiply(line.slope, minX) + line.intercept)[0][0]
         #a = np.divide(np.ones(len(line.slope)), line.slope)
         #b = y1 - np.multiply(a, minX)
         #x2 = np.divide(line.intercept - b, a - line.slope)
@@ -291,7 +801,10 @@ for i in range(64):
 
     for line in segments:
         # If negative correlation, then [minX, maxY], [maxX, minY]
-        if (line.slope[0] > 0):
-            plt.plot([line.min[1], line.max[1]], [line.min[0], line.max[0]], 'r-')
-        else:
-            plt.plot([line.min[1], line.max[1]], [line.max[0], line.min[0]], 'r-')
+        plt.plot([line.start[1], line.end[1]], [line.start[0], line.end[0]], 'r-')
+        #if (line.slope[0] > 0):
+        #    plt.plot([line.min[1], line.max[1]], [line.min[0], line.max[0]], 'r-')
+        #else:
+        #    plt.plot([line.min[1], line.max[1]], [line.max[0], line.min[0]], 'r-')
+
+print("end")

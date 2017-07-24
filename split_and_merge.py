@@ -22,7 +22,11 @@ class Line:
         self.mean = mean
         self.min = np.zeros(2)
         self.max = np.zeros(2)
+        self.start = np.zeros(2)
+        self.end = np.zeros(2)
         self.error = error
+        self.start_connect = -1
+        self.end_connect = -1
 
 def point_line_distance(data, slope, intercept):
     num_dim = len(data)
