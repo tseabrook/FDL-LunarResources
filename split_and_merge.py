@@ -1,4 +1,6 @@
 import numpy as np
+import itertools
+import math
 
 #Split-and-Merge algorithm for turning edges into lines
 
@@ -15,7 +17,11 @@ import numpy as np
 #Piecewise linear approximation i.e. m = 2
 
 class Line:
+    newID = itertools.count().next #Thread-Safe
+    #https://stackoverflow.com/questions/1045344/how-do-you-create-an-incremental-id-in-a-python-class
     def __init__(self, data, slope, intercept, mean, error):
+        # Note: If this item is deleted, ID will be released for reuse
+        self.id = Line.newID()
         self.data = data
         self.slope = slope
         self.intercept = intercept
@@ -25,8 +31,17 @@ class Line:
         self.start = np.zeros(2)
         self.end = np.zeros(2)
         self.error = error
-        self.start_connect = -1
-        self.end_connect = -1
+        self.start_connect = -1 #Depreciate
+        self.end_connect = -1  #Depreciate
+        self.nodes = [-1,-1]
+
+class Node:
+    newID = itertools.count().next  # Thread-Safe
+    def __init__(self, coordinates):
+        # Note: If this item is deleted, ID will be released for reuse
+        self.id = Node.newID()
+        self.coordinates = coordinates
+        self.edges = []
 
 def point_line_distance(data, slope, intercept):
     num_dim = len(data)
@@ -82,6 +97,142 @@ def line_of_best_fit(data):
     error = point_line_distance(data, slope, intercept)
 
     return Line(data, slope, intercept, mean, error)
+
+def generate_line_ends(line):
+    if (abs(line.slope[0][0]) < 1): #dY > dX
+        x1 = np.min(line.data[0])
+        x2 = np.max(line.data[0])
+        if (line.slope[0] > 0): #Positive correlation
+            y1 = int(math.floor(np.multiply(line.slope[0][0], x1) + line.intercept))
+            y2 = int(math.ceil(np.multiply(line.slope[0][0], x2) + line.intercept))
+        else: #Negative correlation
+            y2 = int(math.ceil(np.multiply(line.slope[0][0], x1) + line.intercept))
+            y1 = int(math.floor(np.multiply(line.slope[0][0], x2) + line.intercept))
+    else: #dY < dX
+        y1 = np.min(line.data[1])
+        y2 = np.max(line.data[1])
+
+        if (line.slope[0] > 0): #Positive Correlation
+            x1 = int(math.floor(np.divide((y1 - line.intercept), line.slope[0][0])))
+            x2 = int(math.ceil(np.divide((y2 - line.intercept), line.slope[0][0])))
+        else: #Negative Correlation
+            x2 = int(math.ceil(np.divide((y1 - line.intercept), line.slope[0][0])))
+            x1 = int(math.floor(np.divide((y2 - line.intercept), line.slope[0][0])))
+
+
+    # x1 -= np.minimum(x1,3)
+    # x2 += np.minimum(xMax-x2,3)
+    # y1 -= np.minimum(y1,3)
+    # y2 += np.minimum(yMax-y2,3)
+
+    line.min[0], line.min[1] = x1, y1
+    line.max[0], line.max[1] = x2, y2
+    if (line.slope[0] > 0):
+        line.start[0], line.start[1] = x1, y1
+        line.end[0], line.end[1] = x2, y2
+    else:
+        line.start[0], line.start[1] = x1, y2
+        line.end[0], line.end[1] = x2, y1
+
+def line_distances(line1,line2,big_number=9999999999999):
+    distances = np.zeros(4)
+        # start -> start
+    if ((line1.start_connect < 0) & (line2.start_connect < 0)):
+        distances[0] = point_distance(line1.start, line2.start)
+    else:
+        distances[0] = big_number
+        # start -> end
+    if ((line1.start_connect < 0) & (line2.end_connect < 0)):
+        distances[1] = point_distance(line1.start, line2.end)
+    else:
+        distances[1] = big_number
+        # end -> start
+    if ((line1.end_connect < 0) & (line2.start_connect < 0)):
+        distances[2] = point_distance(line1.end, line2.start)
+    else:
+        distances[2] = big_number
+        # end -> end
+    if ((line1.end_connect < 0) & (line2.start_connect < 0)):
+        distances[3] = point_distance(line1.end, line2.end)
+    else:
+        distances[3] = big_number
+    return distances
+
+def point_distance(point1,point2):
+    return np.sqrt(np.sum(np.power(point1 - point2, 2)))
+
+def draw_line(start,end):
+    data = [list(i) for i in zip(*[start,end])]
+    line = line_of_best_fit(data)
+    line.start = start
+    line.end = end
+
+    return line
+
+def connect_lines(line1, line2, type):
+    connect_switcher = {
+        0: [line1.start, line2.start],
+        1: [line1.start, line2.end],
+        2: [line1.end, line2.start],
+        3: [line1.end, line2.end],
+    }
+
+    [start, end] = connect_switcher[type]
+
+    if(np.sum(abs(start - end)) == 0):
+        attach_lines(line1, line2, type)
+    else:
+        new_line = draw_line(start, end)
+
+        attach_switcher = {
+            0: [0, 2], #l1(start) -> (start)new(end) -> (start)l2
+            1: [0, 3], #l1(start) -> (start)new(end) -> (end)l2
+            2: [2, 2], #l1(end) -> (start)new(end) -> (start)l2
+            3: [2, 1], #l1(end) -> (start)new(end) -> (end)l2
+        }
+        [type1,type2] = attach_switcher[type]
+        attach_lines(line1,new_line,type1) #start->start
+        attach_lines(new_line, line2,type2) #end->start
+    return new_line
+
+def attach_lines(line1, line2, type):
+    if(type == 0):
+        node = Node(line1.start)
+        line1.start_connect = line2.id
+        line2.start_connect = line1.id
+        line1.nodes[0] = node
+        line2.nodes[0] = node
+        node.edges.append(line1)
+        node.edges.append(line2)
+    else:
+        if(type == 1):
+            node = Node(line1.start)
+            line1.start_connect = line2.id
+            line2.end_connect = line1.id
+            line1.nodes[0] = node
+            line2.nodes[1] = node
+            node.edges.append(line1)
+            node.edges.append(line2)
+        else:
+            if(type == 2):
+                node = Node(line1.end)
+                line1.end_connect = line2.id
+                line2.start_connect = line1.id
+                line1.nodes[1] = node
+                line2.nodes[0] = node
+                node.edges.append(line1)
+                node.edges.append(line2)
+            else:
+                if(type == 3):
+                    node = Node(line1.end)
+                    line1.end_connect = line2.id
+                    line2.end_connect = line1.id
+                    line1.nodes[1] = node
+                    line2.nodes[1] = node
+                    node.edges.append(line1)
+                    node.edges.append(line2)
+    return node
+
 
 def split_segment(segment):
 
@@ -252,6 +403,7 @@ def split_and_merge(data, max_error):
         # the last "active" step (see proof of theorem below).
 
     return segments
+
     #For the second case, the "split-and-merge" procedure
     #takes the following form.
     #Step la: If E > Emax then go to Step lb, or else go to
