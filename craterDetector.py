@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 import math
-import networkx as nx
 
 from skimage import data, color
 from skimage.transform import hough_circle, hough_circle_peaks
@@ -10,44 +10,9 @@ from skimage.draw import circle_perimeter
 from skimage.util import img_as_ubyte
 from scipy.sparse import csr_matrix
 from graphCycles import Graph
-from split_and_merge import split_and_merge, line_of_best_fit, \
-        line_distances, point_distance, attach_lines, \
-        generate_line_ends, connect_lines
+import split_and_merge as sm
 
 import glymur
-
-def drawGraph(segments):
-    edges = []
-    for i in range(segments.shape[0]):
-        if(segments[i].start_connect >= 0):
-            edges.append((segments[i].start_connect, i))
-        if (segments[i].end_connect >= 0):
-            edges.append((i, segments[i].end_connect))
-
-    return nx.DiGraph(list(set(edges)))
-
-def checkCycles(segments):
-    edges = []
-    for i in range(segments.shape[0]):
-        if (segments[i].start_connect >= 0):
-            edges.append((segments[i].start_connect, i))
-        if (segments[i].end_connect >= 0):
-            edges.append((i, segments[i].end_connect))
-    num_edges = len(edges)
-    g = Graph(num_edges)
-    for edge in edges:
-        g.addEdge(edge[0], edge[1])
-
-    return g.isCyclic()
-
-def findCycles(G):
-    try:
-        cycles = list(nx.find_cycle(G, orientation='ignore'))
-    except:
-        pass
-        cycles = []
-    return cycles
-
 
 def edgeCluster(edges, max_step):
     #edgeCluster algorithm
@@ -139,7 +104,7 @@ def edgeCluster(edges, max_step):
 
 filename = 'imgs/testdata/m108898482_cdr_jp2_p'
 hypothesis = 4
-
+num_nodes = 0
 
 for n in range(2):
     #curr_filename = filename+str(n+1)+'.jp2'
@@ -159,15 +124,14 @@ for n in range(2):
     #data = np.where(edges)
     for i in range(1,len(lines)):
         if i == 1:
-            segments = split_and_merge(lines[i], 1)
+            segments = sm.split_and_merge(lines[i], 1)
             segmentParent[i] = len(segments)
         else:
-            segments = np.hstack((segments, split_and_merge(lines[i], 0.5)))
+            segments = np.hstack((segments, sm.split_and_merge(lines[i], 0.5)))
             segmentParent[i] = segments.size
 
-
     cm = plt.get_cmap('gist_rainbow')
-    f1, axarr = plt.subplots(ncols=2, nrows=1)
+    fig1, axarr = plt.subplots(ncols=2, nrows=1)
     axarr[0].imshow(edges, cmap=plt.cm.gray)
     axarr[1].imshow(image, cmap=plt.cm.gray)
     axarr[1].set_color_cycle([cm(1. * i / 20) for i in range(20)])
@@ -175,10 +139,13 @@ for n in range(2):
         y, x = lines[i]
         axarr[1].scatter(x, y, alpha=0.8, edgecolors='none', s=1)
 
-    f2, axarr = plt.subplots(ncols=2, nrows=1)
+    fig2, axarr = plt.subplots(ncols=2, nrows=1)
     axarr[0].imshow(image, cmap=plt.cm.gray)
     axarr[1].imshow(image, cmap=plt.cm.gray)
     #For every grouped line
+
+    nodes = []
+
     for i in range(1,len(lines)):
         first = segmentParent[i-1]
         last = segmentParent[i]
@@ -186,7 +153,7 @@ for n in range(2):
         #For every segment of line
         plt.axes(axarr[0])
         for j in range(first,last):
-            generate_line_ends(segments[j])
+            sm.generate_line_ends(segments[j])
             plt.plot([segments[j].start[1], segments[j].end[1]], [segments[j].start[0], segments[j].end[0]], 'r-')
 
     #Hypothesis 1
@@ -409,7 +376,7 @@ for n in range(2):
                                             data = switcher.get(ind)
                                             connected[j - first, k - first] = True
                                             connected[k - first, j - first] = True
-                                            segments = np.insert(segments, last, line_of_best_fit(data))
+                                            segments = np.insert(segments, last, sm.line_of_best_fit(data))
                                             segments[last].start = [data[0][0], data[0][1]]
                                             segments[last].end = [data[1][0], data[1][1]]
                                             segmentParent[i:] = segmentParent[i:]+1
@@ -425,7 +392,6 @@ for n in range(2):
             max_extend = 6
             connected_lines = np.zeros(last - first,dtype=bool)
             connected = np.zeros((last-first, last-first),dtype=bool)
-            nodes = []
             #for j in range(first, last):
             #    for k in range(first, last):
             #        if (j < k):
@@ -538,7 +504,7 @@ for n in range(2):
                             #Measure the distance between the ends of the lines
                             #Ensure that lines are unconnected before measuring distance
                             # start -> start
-                            line_adjacency[j,k,:] = line_distances(segments[unconnected[j]],segments[unconnected[k]])
+                            line_adjacency[j,k,:] = sm.line_distances(segments[unconnected[j]],segments[unconnected[k]])
                     else:
                         if(j == k):
                             line_adjacency[j, k, 0] = big_number
@@ -568,7 +534,11 @@ for n in range(2):
                     if line_adjacency[j,k,l] < max_extend:
 
                         if(line_adjacency[j,k,l] == 0):
-                            attach_lines(segments[unconnected[j]], segments[unconnected[k]], l)
+                            node = sm.attach_lines(segments[unconnected[j]], segments[unconnected[k]], l)
+                            if (node.id >= num_nodes):
+                                nodes.append(node)
+                                num_nodes += 1
+
                             connected[k, j] = True
                             connected[j, k] = True
                             line_adjacency[j, k, :] = big_number
@@ -577,7 +547,16 @@ for n in range(2):
                         else:
                             #Create a new line to bridge the distance
                             segments = np.insert(segments, last,
-                                    connect_lines(segments[unconnected[j]], segments[unconnected[k]], l))
+                                    sm.connect_lines(segments[unconnected[j]], segments[unconnected[k]], l))
+
+                            if (segments[last].nodes[0] is not None):
+                                if (segments[last].nodes[0].id >= num_nodes):
+                                    nodes.append(segments[last].nodes[0])
+                                    num_nodes += 1
+                            if (segments[last].nodes[1] is not None):
+                                if (segments[last].nodes[1].id >= num_nodes):
+                                    nodes.append(segments[last].nodes[1])
+                                    num_nodes += 1
 
                             segmentParent[i:] = segmentParent[i:] + 1
                             connected = np.hstack((connected, np.zeros((last-first, 1), dtype=bool)))
@@ -649,18 +628,18 @@ for n in range(2):
                         else:
                             #Measure distance to all other ends of lines
                             if(segments[unconnected[j]].start_connect < 0):
-                                line_adjacency[k, 0] = point_distance(segments[unconnected[j]].start,segments[k+first].start)
-                                line_adjacency[k, 1] = point_distance(segments[unconnected[j]].start,segments[k+first].end)
+                                line_adjacency[k, 0] = sm.point_distance(segments[unconnected[j]].start,segments[k+first].start)
+                                line_adjacency[k, 1] = sm.point_distance(segments[unconnected[j]].start,segments[k+first].end)
                             else:
                                 line_adjacency[k, 0] = big_number
                                 line_adjacency[k, 1] = big_number
                             if(segments[unconnected[j]].end_connect < 0):
-                                line_adjacency[k, 2] = point_distance(segments[unconnected[j]].end,segments[k+first].start)
-                                line_adjacency[k, 3] = point_distance(segments[unconnected[j]].end,segments[k+first].end)
+                                line_adjacency[k, 2] = sm.point_distance(segments[unconnected[j]].end,segments[k+first].start)
+                                line_adjacency[k, 3] = sm.point_distance(segments[unconnected[j]].end,segments[k+first].end)
                             else:
                                 line_adjacency[k, 2] = big_number
                                 line_adjacency[k, 3] = big_number
-#                            line_distances(segments[unconnected[j]],segments[k+first])
+#                            sm.line_distances(segments[unconnected[j]],segments[k+first])
 
                 k, l = np.unravel_index(np.argmin(line_adjacency), line_adjacency.shape)
 
@@ -669,12 +648,24 @@ for n in range(2):
                     if (line_adjacency[k,l] == 0): #If shortest distance indicates prior connection, form connection formally
                         connected[unconnected[j] - first, k] = True
                         connected[k, unconnected[j] - first] = True
-                        attach_lines(segments[unconnected[j]], segments[k+first], l)
+                        node = sm.attach_lines(segments[unconnected[j]], segments[k+first], l)
+                        if (node.id >= num_nodes):
+                            nodes.append(node)
+                            num_nodes += 1
                     else:
                         changeFlag = True
 
                         segments = np.insert(segments, last,
-                                 connect_lines(segments[unconnected[j]], segments[k+first], l))
+                                 sm.connect_lines(segments[unconnected[j]], segments[k+first], l))
+
+                        if (segments[last].nodes[0] is not None):
+                            if (segments[last].nodes[0].id >= num_nodes):
+                                nodes.append(segments[last].nodes[0])
+                                num_nodes += 1
+                        if (segments[last].nodes[1] is not None):
+                            if (segments[last].nodes[1].id >= num_nodes):
+                                nodes.append(segments[last].nodes[1])
+                                num_nodes += 1
 
                         connected[unconnected[j] - first, k] = True
                         connected[k, unconnected[j] - first] = True
@@ -695,11 +686,31 @@ for n in range(2):
 
         #print(checkCycles(segments[first:last]))
         plt.axes(axarr[1])
-        for m in range(first,last):
+        axarr[1].imshow(image, cmap=plt.cm.gray)
+        for m in range(first):
             plt.plot([segments[m].start[1], segments[m].end[1]], [segments[m].start[0], segments[m].end[0]], 'r-')
 
-        print('done')
-        #cycles = findCycles(drawGraph(segments[first:last]))
+        for m in range(first,last):
+            plt.plot([segments[m].start[1], segments[m].end[1]], [segments[m].start[0], segments[m].end[0]], 'g-')
+
+        graph = sm.getEdges(segments[first:last])
+        nodes2 = sm.getNodes(segments[first:last])
+
+        cycles = sm.find_nxCycle(graph)
+        #print(cycles)
+        cycles = sm.mergeCycles(cycles)
+        boxes = sm.findBounds(cycles, nodes2)
+        for box in boxes:
+            coord, width, height = sm.boxToMatplotPatch(box)
+            axarr[1].add_patch(
+                patches.Rectangle(
+                    coord, width, height,#(x,y), width, height
+                    fill=False
+                )
+            )
+        print(boxes)
+
+        #cycles = sm.findCycles(drawGraph(segments[first:last]))
         #if (len(cycles) > 0):
         #    print(cycles)
 

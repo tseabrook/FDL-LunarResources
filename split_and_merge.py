@@ -1,6 +1,8 @@
 import numpy as np
 import itertools
 import math
+from copy import deepcopy, copy
+import networkx as nx
 
 #Split-and-Merge algorithm for turning edges into lines
 
@@ -33,7 +35,7 @@ class Line:
         self.error = error
         self.start_connect = -1 #Depreciate
         self.end_connect = -1  #Depreciate
-        self.nodes = [-1,-1]
+        self.nodes = [None,None]
 
 class Node:
     newID = itertools.count().next  # Thread-Safe
@@ -42,6 +44,10 @@ class Node:
         self.id = Node.newID()
         self.coordinates = coordinates
         self.edges = []
+        self.nodes = []
+
+    def __len__(self):
+        return 1
 
 def point_line_distance(data, slope, intercept):
     num_dim = len(data)
@@ -134,6 +140,251 @@ def generate_line_ends(line):
         line.start[0], line.start[1] = x1, y2
         line.end[0], line.end[1] = x2, y1
 
+
+class Path:
+    newID = itertools.count().next #Thread-Safe
+    cycles = []
+    def __init__(self, current, last=None):
+        self.id = Path.newID()
+        self.current = current
+        #Path.visited.append(current.id)
+        self.last = last
+        if(last is not None):
+            self.visited = copy(self.last.visited)
+            self.visited.append(self.current.id)
+        else:
+            self.visited = [self.current.id]
+
+        self.next = nextPath(self)
+
+    #def __len__(self):
+    #    return 1
+
+
+def mergeCycles(cycles):
+    i = 0
+    while i < len(cycles):
+        j = 0
+        if(len(cycles[i]) == 1):
+            del cycles[i]
+        else:
+            while j < len(cycles):
+                if((i != j) & (j > i)):
+                    unique_nodes = list(set(cycles[i]+cycles[j]))
+                    if((len(cycles[i]) + len(cycles[j]))
+                           - len(unique_nodes) >= 2):
+                        # At least two shared nodes
+                        # Merge Cycles
+                        cycles[i] = unique_nodes
+                        del cycles[j]
+                    else:
+                        j += 1
+                else:
+                    j += 1
+        i += 1
+    return cycles
+
+
+def findBounds(cycles, nodes):
+    num_cycles = len(cycles)
+    boxes = []
+    for i in range(num_cycles):
+        for j in range(len(cycles[i])):
+            id = cycles[i][j]
+            node = nodes[id]
+            if j == 0:
+                bbox = [node.coordinates[0], node.coordinates[0],
+                        node.coordinates[1],node.coordinates[1]]
+            else:
+                if(node.coordinates[0] < bbox[0]):
+                    bbox[0] = node.coordinates[0]
+                if(node.coordinates[0] > bbox[1]):
+                    bbox[1] = node.coordinates[0]
+                if (node.coordinates[1] < bbox[2]):
+                    bbox[2] = node.coordinates[1]
+                if (node.coordinates[1] > bbox[3]):
+                    bbox[3] = node.coordinates[1]
+        boxes.append([[bbox[0], bbox[2]], #xmin ymin
+               [bbox[0], bbox[3]], #xmin ymax
+               [bbox[1], bbox[2]], #xmax ymin
+               [bbox[1], bbox[3]]]) #xmax ymax
+    return boxes
+
+def boxToMatplotPatch(box):
+    height = box[2][0] - box[0][0]
+    width = box[1][1] - box[0][1]
+    coord = (box[0][1], box[0][0])
+    return coord, width, height
+
+def edgeMerge(boxes,bbox):
+    counts = [0, 0]
+    mergeFlag = False
+    i = 0
+    while((mergeFlag == False) & (i < len(boxes))):
+        if ((boxes[i][0] > bbox[0]) & (boxes[i][0] < bbox[1])):
+            counts[0] += 1
+        if ((boxes[i][1] < bbox[1]) & (boxes[i][1] > bbox[0])):
+            counts[0] += 1
+        if ((boxes[i][2] > bbox[2]) & (boxes[i][2] < bbox[3])):
+            counts[0] += 1
+        if ((boxes[i][3] < bbox[3]) & (boxes[i][3] < bbox[2])):
+            counts[0] += 1
+
+        if ((bbox[0] > boxes[i][0]) & (bbox[0] < boxes[i][1])):
+            counts[1] += 1
+        if ((bbox[1] < boxes[i][1]) & (bbox[1] > boxes[i][0])):
+            counts[1] += 1
+        if ((bbox[2] > boxes[i][2]) & (bbox[2] < boxes[i][3])):
+            counts[1] += 1
+        if ((bbox[3] < boxes[i][3]) & (bbox[3] < boxes[i][2])):
+            counts[1] += 1
+
+        if ((counts[0] >= 3) ^ (counts[1] >= 3)):
+            # bbox extends box or box extends bbox
+            boxes[0] = np.minimum(bbox[0], boxes[0])
+            boxes[1] = np.maximum(bbox[1], boxes[1])
+            boxes[2] = np.minimum(bbox[2], boxes[2])
+            boxes[3] = np.maximum(bbox[3], boxes[3])
+            mergeFlag = True
+        i += 1
+
+    if(mergeFlag == False):
+        boxes.append([0] * 4)
+            # if(counts[0] + counts[1] >= 4):
+            # one corner overlaps
+            # Do we want to keep these separate?
+
+    return boxes
+
+
+def nextPath(path):
+    if(path.last is not None):
+        last = path.last.current.id
+    else:
+        last = path.last
+    next = getNeighbourNodes(path.current, last)
+    paths = []
+    for node in next:
+        if(len(node) > 0):
+            cycleFound = False
+            for cycle in Path.cycles:
+                if(node[0].id in cycle):
+                    cycleFound = True
+            if(cycleFound):
+                if(checkCycle(path, node[0])):
+                    paths.append(Path(node[0],path))
+            else:
+                if(node[0].id in path.visited):
+                    findCycle(path, node[0])
+                else:
+                    paths.append(Path(node[0], path))
+    return paths
+
+def checkCycle(path, node):
+    next = getNeighbourNodes(node, path.current)
+    for cycle in Path.cycles:
+        if((node.id in cycle) & (path.current.id in cycle)):
+            i = 0
+            while(i < len(next)):
+                #If last & current & next are joinly present in any cycle
+                if(next[i][0].id in cycle):
+                    #  then cut from continued search
+                    del next[i]
+                else:
+                    i += 1
+    if(len(next) > 0):
+        return True
+    else:
+        return False
+
+
+def findCycle(path, cycle_point):
+    cycle = [cycle_point.id]
+    parent = deepcopy(path)
+    while(parent.current.id != cycle_point.id):
+        cycle.append(parent.current.id)
+        parent = parent.last
+    Path.cycles.append(cycle)
+
+def getEdges(segments):
+    Graph = []
+    for segment in segments:
+        if ((segment.nodes[0] is not None) & (segment.nodes[1] is not None)):
+            Graph.append((segment.nodes[0].id, segment.nodes[1].id))
+            #print(str(segment.id))
+            #print(str(segment.nodes[0].id)+' '+str(segment.nodes[1].id))
+    return Graph
+
+
+def getNodes(segments):
+    nodes = {}
+    for segment in segments:
+        if(segment.nodes[0] is not None):
+            nodes[segment.nodes[0].id] = segment.nodes[0]
+        if (segment.nodes[1] is not None):
+            nodes[segment.nodes[1].id] = segment.nodes[1]
+
+    return nodes
+
+def find_nxCycle(Graph):
+    G = nx.DiGraph(Graph)
+    cycles = list(nx.cycle_basis(G.to_undirected()))
+    return cycles
+
+def getNodeEdges(node):
+    edges = []
+    for edge in node.edges:
+            edges.append(edge)
+    return edges
+
+def getEdgeNext(edge, last=None, past=None):
+    if(len(edge.nodes) > 2):
+        print('too many nodes attached to edge!')
+    next = []
+    for node in edge.nodes:
+        if node is not None:
+            if((last != node.id) & (past != node.id)):
+                next.append(node)
+    return next
+
+def getNeighbourNodes(node,last=None):
+    edges = getNodeEdges(node)
+    nodes = []
+    for edge in edges:
+        nodes.append(getEdgeNext(edge,node.id,last))
+    return nodes
+
+def isCyclicUtil(self, v, visited, parent):
+    # Mark the current node as visited
+    visited[v] = True
+
+    # Recur for all the vertices adjacent to this vertex
+    for i in self.graph[v]:
+        # If the node is not visited then recurse on it
+        if visited[i] == False:
+            if (self.isCyclicUtil(i, visited, v)):
+                return True
+        # If an adjacent vertex is visited and not parent of current vertex,
+        # then there is a cycle
+        elif parent != i:
+            return True
+
+    return False
+
+# Returns true if the graph contains a cycle, else false.
+def isCyclic(self):
+    # Mark all the vertices as not visited
+    visited = [False] * (self.V)
+    # Call the recursive helper function to detect cycle in different
+    # DFS trees
+    for i in range(self.V):
+        if visited[i] == False:  # Don't recur for u if it is already visited
+            if (self.isCyclicUtil(i, visited, -1)) == True:
+                return True
+
+    return False
+
+
 def line_distances(line1,line2,big_number=9999999999999):
     distances = np.zeros(4)
         # start -> start
@@ -180,7 +431,7 @@ def connect_lines(line1, line2, type):
     [start, end] = connect_switcher[type]
 
     if(np.sum(abs(start - end)) == 0):
-        attach_lines(line1, line2, type)
+        node = attach_lines(line1, line2, type)
     else:
         new_line = draw_line(start, end)
 
@@ -191,46 +442,78 @@ def connect_lines(line1, line2, type):
             3: [2, 1], #l1(end) -> (start)new(end) -> (end)l2
         }
         [type1,type2] = attach_switcher[type]
-        attach_lines(line1,new_line,type1) #start->start
-        attach_lines(new_line, line2,type2) #end->start
+        node = attach_lines(line1,new_line,type1) #start->start
+        node = attach_lines(new_line, line2,type2) #end->start
     return new_line
 
 def attach_lines(line1, line2, type):
     if(type == 0):
-        node = Node(line1.start)
+        if(line1.nodes[0] is not None):
+            node = line1.nodes[0]
+        else:
+            if(line2.nodes[0] is not None):
+                node = line2.nodes[0]
+            else:
+                node = Node(line1.start)
         line1.start_connect = line2.id
         line2.start_connect = line1.id
         line1.nodes[0] = node
         line2.nodes[0] = node
-        node.edges.append(line1)
-        node.edges.append(line2)
+        if (line1 not in node.edges):
+            node.edges.append(line1)
+        if (line2 not in node.edges):
+            node.edges.append(line2)
     else:
         if(type == 1):
-            node = Node(line1.start)
+            if (line1.nodes[0] is not None):
+                node = line1.nodes[0]
+            else:
+                if (line2.nodes[1] is not None):
+                    node = line2.nodes[1]
+                else:
+                    node = Node(line1.start)
             line1.start_connect = line2.id
             line2.end_connect = line1.id
             line1.nodes[0] = node
             line2.nodes[1] = node
-            node.edges.append(line1)
-            node.edges.append(line2)
+            if(line1 not in node.edges):
+                node.edges.append(line1)
+            if(line2 not in node.edges):
+                node.edges.append(line2)
         else:
             if(type == 2):
-                node = Node(line1.end)
+                if (line1.nodes[1] is not None):
+                    node = line1.nodes[1]
+                else:
+                    if (line2.nodes[0] is not None):
+                        node = line2.nodes[0]
+                    else:
+                        node = Node(line2.start)
                 line1.end_connect = line2.id
                 line2.start_connect = line1.id
                 line1.nodes[1] = node
                 line2.nodes[0] = node
-                node.edges.append(line1)
-                node.edges.append(line2)
+                if (line1 not in node.edges):
+                    node.edges.append(line1)
+                if (line2 not in node.edges):
+                    node.edges.append(line2)
             else:
                 if(type == 3):
-                    node = Node(line1.end)
+                    if (line1.nodes[1] is not None):
+                        node = line1.nodes[1]
+                    else:
+                        if (line2.nodes[1] is not None):
+                            node = line2.nodes[1]
+                        else:
+                            node = Node(line1.end)
                     line1.end_connect = line2.id
                     line2.end_connect = line1.id
                     line1.nodes[1] = node
                     line2.nodes[1] = node
-                    node.edges.append(line1)
-                    node.edges.append(line2)
+                    if (line1 not in node.edges):
+                        node.edges.append(line1)
+                    if (line2 not in node.edges):
+                        node.edges.append(line2)
     return node
 
 
@@ -244,7 +527,7 @@ def split_segment(segment):
 
 
     split1 = (segment.data[1] - (np.multiply(a, segment.data[0]) + b)) > 0
-    split2 = split1 == False
+    split2 = (split1 == False)
 
     #split_point = np.int(np.floor(len(segment.data[0])/2))
 
