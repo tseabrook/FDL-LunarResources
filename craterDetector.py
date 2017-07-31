@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import math
-
+import os
 from skimage import data, color
 from skimage.transform import hough_circle, hough_circle_peaks
 from skimage.feature import canny
@@ -11,7 +11,7 @@ from skimage.util import img_as_ubyte
 from scipy.sparse import csr_matrix
 from graphCycles import Graph
 import split_and_merge as sm
-
+from PIL import Image
 import glymur
 
 def edgeCluster(edges, max_step):
@@ -102,13 +102,19 @@ def edgeCluster(edges, max_step):
     #return labels #return labels and count
 
 
-filename = 'imgs/testdata/m108898482_cdr_jp2_p'
+base_folder = "/Volumes/DATA DISK/PDS_FILES/LROC_NAC/m108898482_cdr_w_jp2/"
+base_filename ="m108898482_cdr_jp2"
+
 hypothesis = 4
 num_nodes = 0
 
-for n in range(2):
+for n in range(32):
+    num_craters = 0
+    num_bigcraters = 0
     #curr_filename = filename+str(n+1)+'.jp2'
-    curr_filename = 'imgs/testdata/test_img.jp2'
+    curr_filename = base_folder+base_filename+'_p'+str(n+1)+'.jp2'
+    if not os.path.isdir(base_folder + 'p' + str(n + 1) + "/"):
+        os.mkdir(base_folder + 'p' + str(n + 1) + "/")
     # Load picture and detect edges
     image = glymur.Jp2k(curr_filename)[:]
     # Low threshold and High threshold represent number of pixels that may be skipped to make a line [4, 60 seems good]
@@ -130,18 +136,18 @@ for n in range(2):
             segments = np.hstack((segments, sm.split_and_merge(lines[i], 0.5)))
             segmentParent[i] = segments.size
 
-    cm = plt.get_cmap('gist_rainbow')
-    fig1, axarr = plt.subplots(ncols=2, nrows=1)
-    axarr[0].imshow(edges, cmap=plt.cm.gray)
-    axarr[1].imshow(image, cmap=plt.cm.gray)
-    axarr[1].set_color_cycle([cm(1. * i / 20) for i in range(20)])
-    for i in range(1,len(lines)):
-        y, x = lines[i]
-        axarr[1].scatter(x, y, alpha=0.8, edgecolors='none', s=1)
+    #cm = plt.get_cmap('gist_rainbow')
+    #fig1, axarr = plt.subplots(ncols=2, nrows=1)
+    #axarr[0].imshow(edges, cmap=plt.cm.gray)
+    #axarr[1].imshow(image, cmap=plt.cm.gray)
+    #axarr[1].set_color_cycle([cm(1. * i / 20) for i in range(20)])
+    #for i in range(1,len(lines)):
+    #    y, x = lines[i]
+    #    axarr[1].scatter(x, y, alpha=0.8, edgecolors='none', s=1)
 
-    fig2, axarr = plt.subplots(ncols=2, nrows=1)
-    axarr[0].imshow(image, cmap=plt.cm.gray)
-    axarr[1].imshow(image, cmap=plt.cm.gray)
+    #fig2, axarr = plt.subplots(ncols=2, nrows=1)
+    #axarr[0].imshow(image, cmap=plt.cm.gray)
+    #axarr[1].imshow(image, cmap=plt.cm.gray)
     #For every grouped line
 
     nodes = []
@@ -151,10 +157,10 @@ for n in range(2):
         last = segmentParent[i]
 
         #For every segment of line
-        plt.axes(axarr[0])
+        #plt.axes(axarr[0])
         for j in range(first,last):
             sm.generate_line_ends(segments[j])
-            plt.plot([segments[j].start[1], segments[j].end[1]], [segments[j].start[0], segments[j].end[0]], 'r-')
+        #    plt.plot([segments[j].start[1], segments[j].end[1]], [segments[j].start[0], segments[j].end[0]], 'r-')
 
     #Hypothesis 1
         # proposal: extend all lines by a scalar value to encourage intersection
@@ -685,13 +691,13 @@ for n in range(2):
                         last = last + 1
 
         #print(checkCycles(segments[first:last]))
-        plt.axes(axarr[1])
-        axarr[1].imshow(image, cmap=plt.cm.gray)
-        for m in range(first):
-            plt.plot([segments[m].start[1], segments[m].end[1]], [segments[m].start[0], segments[m].end[0]], 'r-')
-
-        for m in range(first,last):
-            plt.plot([segments[m].start[1], segments[m].end[1]], [segments[m].start[0], segments[m].end[0]], 'g-')
+        #plt.axes(axarr[1])
+        #axarr[1].imshow(image, cmap=plt.cm.gray)
+        #for m in range(first):
+        #    plt.plot([segments[m].start[1], segments[m].end[1]], [segments[m].start[0], segments[m].end[0]], 'r-')
+#
+#        for m in range(first,last):
+#            plt.plot([segments[m].start[1], segments[m].end[1]], [segments[m].start[0], segments[m].end[0]], 'g-')
 
         graph = sm.getEdges(segments[first:last])
         nodes2 = sm.getNodes(segments[first:last])
@@ -702,15 +708,37 @@ for n in range(2):
         boxes = sm.findBounds(cycles, nodes2)
         for box in boxes:
             coord, width, height = sm.boxToMatplotPatch(box)
-            axarr[1].add_patch(
-                patches.Rectangle(
-                    coord, width, height,#(x,y), width, height
-                    fill=False
-                )
-            )
-        print(boxes)
+#            axarr[1].add_patch(
+#                patches.Rectangle(
+#                    coord, width, height,#(x,y), width, height
+#                    fill=False
+#                )
+#            )
+            if((width >= 20) & (height >= 20)):
+                #Big enough for 1px DEM
+                if((width > 160) & (height > 160)):
+                    #Big enough for 8px DEM
+                    #coord = x1,y1
+                    #x2 = x1+width
+                    #y2 = y1+height
+                    im = image[
+                         int(coord[1] - np.floor_divide(height, 4)):int(coord[1] + height + np.floor_divide(height, 4)),
+                         int(coord[0] - np.floor_divide(width, 4)):int(coord[0] + width + np.floor_divide(width, 4))]
+                    filename = base_folder + 'p' + str(n + 1) + "/" + base_filename + '_big_crater' + str(num_bigcraters)
+                    num_bigcraters = num_bigcraters +1
+                    im2 = Image.fromarray(im)
+                    im2.save(filename + '.png')
+                else:
+                    im = image[
+                         int(coord[1] - np.floor_divide(height, 4)):int(coord[1] + height + np.floor_divide(height, 4)),
+                         int(coord[0] - np.floor_divide(width, 4)):int(coord[0] + width + np.floor_divide(width, 4))]
+                    filename = base_folder + 'p' + str(n + 1) + "/" + base_filename + '_crater' + str(num_craters)
+                    num_craters = num_craters + 1
+                    im2 = Image.fromarray(im)
+                    im2.save(filename + '.png')
 
-        #cycles = sm.findCycles(drawGraph(segments[first:last]))
+
+                    #cycles = sm.findCycles(drawGraph(segments[first:last]))
         #if (len(cycles) > 0):
         #    print(cycles)
 
