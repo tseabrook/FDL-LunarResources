@@ -149,6 +149,10 @@ def long_id(self, sample, line):
     #   Lon = LonP + atan(x/y)
     #   x = (Sample - S0 - 1) * Scale
     #   y = (1 - L0 - Line) * Scale
+    #LINE_PROJECTION_OFFSET: (Bottom boundary value?)
+    #MAP_SCALE: (metre per pix ?)
+    #SAMPLE_PROJECTION_OFFSET: (Left boundary value?)
+    #CENTER LONGITUDE: Longitude at center point (for SP DEM = 0)
 
     y = (1 + self.LINE_PROJECTION_OFFSET - line) * self.MAP_SCALE * 1e-3
     x = (sample - self.SAMPLE_PROJECTION_OFFSET - 1) * self.MAP_SCALE * 1e-3
@@ -163,6 +167,13 @@ def lat_id(self, line):
     Returns:
         Corresponding latitude in degree
     '''
+
+    #LINE_PROJECTION_OFFSET: (Bottom pixel value?)
+    #MAP_SCALE: (metre per pix ?)
+    #R: RADIUS
+    #P: PYTHAGOREAN DISTANCE (Hypotenuse)
+    #C: ARCLENGTH (?)
+
     P = np.sqrt(np.power(x,2) + np.power(y,2))
     R = 1737.4
     C = 2*np.arctan(np.multiply(np.divide(P,2), R))

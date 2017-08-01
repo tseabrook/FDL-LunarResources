@@ -722,21 +722,24 @@ for n in range(32):
                     #x2 = x1+width
                     #y2 = y1+height
                     im = image[
-                         int(coord[1] - np.floor_divide(height, 4)):int(coord[1] + height + np.floor_divide(height, 4)),
-                         int(coord[0] - np.floor_divide(width, 4)):int(coord[0] + width + np.floor_divide(width, 4))]
-                    filename = base_folder + 'p' + str(n + 1) + "/" + base_filename + '_big_crater' + str(num_bigcraters)
+                         int(np.minimum(0, coord[1] - np.floor_divide(height, 4))):int(np.maximum(coord[1] + height + np.floor_divide(height, 4), edges.shape[0])),
+                         int(np.minimum(0, coord[0] - np.floor_divide(width, 4))):int(np.maximum(coord[0] + width+ np.floor_divide(width, 4), edges.shape[1]))]
+                    filename = base_folder + 'p' + str(n + 1) + "/" + base_filename + '_big_crater' + str(num_bigcraters) + '_at_x' + str(coord[0]) + 'w' + str(width) + 'at_y' + str(coord[1]) + 'h' + str(height)
                     num_bigcraters = num_bigcraters +1
                     im2 = Image.fromarray(im)
                     im2.save(filename + '.png')
                 else:
                     im = image[
-                         int(coord[1] - np.floor_divide(height, 4)):int(coord[1] + height + np.floor_divide(height, 4)),
-                         int(coord[0] - np.floor_divide(width, 4)):int(coord[0] + width + np.floor_divide(width, 4))]
-                    filename = base_folder + 'p' + str(n + 1) + "/" + base_filename + '_crater' + str(num_craters)
+                         int(np.minimum(0, coord[1] - np.floor_divide(height, 4))):int(
+                             np.maximum(coord[1] + height + np.floor_divide(height, 4), edges.shape[0])),
+                         int(np.minimum(0, coord[0] - np.floor_divide(width, 4))):int(
+                             np.maximum(coord[0] + width + np.floor_divide(width, 4), edges.shape[1]))]
+                    filename = base_folder + 'p' + str(n + 1) + "/" + base_filename + '_crater' + str(
+                        num_craters) + '_at_x' + str(coord[0]) + 'w' + str(width) + 'at_y' + str(
+                        coord[1]) + 'h' + str(height)
                     num_craters = num_craters + 1
                     im2 = Image.fromarray(im)
                     im2.save(filename + '.png')
-
 
                     #cycles = sm.findCycles(drawGraph(segments[first:last]))
         #if (len(cycles) > 0):
