@@ -13,6 +13,7 @@ from graphCycles import Graph
 import split_and_merge as sm
 from PIL import Image
 import glymur
+import gdal
 
 def edgeCluster(edges, max_step):
     #edgeCluster algorithm
@@ -102,21 +103,34 @@ def edgeCluster(edges, max_step):
     #return labels #return labels and count
 
 
-base_folder = "/Volumes/DATA DISK/PDS_FILES/LROC_NAC/m108898482_cdr_w_jp2/"
-base_filename ="m108898482_cdr_jp2"
+#base_folder = "/Volumes/DATA DISK/PDS_FILES/LROC_NAC/m108898482_cdr_w_jp2/"
+#base_filename ="m108898482_cdr_jp2"
+base_folder =  "/Users/seabrook/Documents/FDL/FDL-LunarResources/PDS_FILES/LROC_NAC/"
+base_filename = "M1106504662RE"
+filename = base_folder+"P26_0-18000.txt"
 
+d = []
+with open(filename,'rb') as source:
+    for line in source:
+        fields = line.split('\t')
+        d.append(fields)
 hypothesis = 4
 num_nodes = 0
 
-for n in range(32):
+for n in range(len(d)-1):
+    #base_filename = d[n+1][0]
+    num_lil_craters = 0
     num_craters = 0
     num_bigcraters = 0
     #curr_filename = filename+str(n+1)+'.jp2'
-    curr_filename = base_folder+base_filename+'_p'+str(n+1)+'.jp2'
-    if not os.path.isdir(base_folder + 'p' + str(n + 1) + "/"):
-        os.mkdir(base_folder + 'p' + str(n + 1) + "/")
+    curr_filename = base_folder+base_filename+'.tif'
+    ds = gdal.Open(curr_filename)
+    image = np.array(ds.GetRasterBand(1).ReadAsArray())
+    #curr_filename = base_folder+base_filename+'_p'+str(n+1)+'.tif'
+    #if not os.path.isdir(base_folder + 'p' + str(n + 1) + "/"):
+    #    os.mkdir(base_folder + 'p' + str(n + 1) + "/")
     # Load picture and detect edges
-    image = glymur.Jp2k(curr_filename)[:]
+    #image = glymur.Jp2k(curr_filename)[:]
     # Low threshold and High threshold represent number of pixels that may be skipped to make a line [4, 60 seems good]
     # Sigma represents the width of the guassian smoothing kernel [3 seems good]
     edges = canny(image, sigma=3, low_threshold=4, high_threshold=50)
@@ -714,32 +728,38 @@ for n in range(32):
 #                    fill=False
 #                )
 #            )
-            if((width >= 20) & (height >= 20)):
-                #Big enough for 1px DEM
-                if((width > 160) & (height > 160)):
-                    #Big enough for 8px DEM
-                    #coord = x1,y1
-                    #x2 = x1+width
-                    #y2 = y1+height
-                    im = image[
-                         int(np.minimum(0, coord[1] - np.floor_divide(height, 4))):int(np.maximum(coord[1] + height + np.floor_divide(height, 4), edges.shape[0])),
-                         int(np.minimum(0, coord[0] - np.floor_divide(width, 4))):int(np.maximum(coord[0] + width+ np.floor_divide(width, 4), edges.shape[1]))]
-                    filename = base_folder + 'p' + str(n + 1) + "/" + base_filename + '_big_crater' + str(num_bigcraters) + '_at_x' + str(coord[0]) + 'w' + str(width) + 'at_y' + str(coord[1]) + 'h' + str(height)
-                    num_bigcraters = num_bigcraters +1
-                    im2 = Image.fromarray(im)
-                    im2.save(filename + '.png')
+
+            im = image[
+                 int(np.maximum(0, coord[1] - np.floor_divide(height, 4))):int(
+                     np.minimum(coord[1] + height + np.floor_divide(height, 4), edges.shape[0])),
+                 int(np.maximum(0, coord[0] - np.floor_divide(width, 4))):int(
+                     np.minimum(coord[0] + width + np.floor_divide(width, 4), edges.shape[1]))]
+
+            if ((width >= 20) & (height >= 20)):
+                # Big enough for 1px DEM
+                if ((width > 160) & (height > 160)):
+                    # Big enough for 8px DEM
+                    # coord = x1,y1
+                    # x2 = x1+width
+                    # y2 = y1+height
+                    filename = base_folder + "craters/" + base_filename + '_big_crater' + str(
+                        num_bigcraters) + '_at_x' + str(int(np.floor_divide(coord[0]))) + 'w' + str(int(np.floor_divide(width))) + 'at_y' + str(
+                        int(np.floor_divide(coord[1]))) + 'h' + str(int(np.floor_divide(height)))
+                    num_bigcraters = num_bigcraters + 1
                 else:
-                    im = image[
-                         int(np.minimum(0, coord[1] - np.floor_divide(height, 4))):int(
-                             np.maximum(coord[1] + height + np.floor_divide(height, 4), edges.shape[0])),
-                         int(np.minimum(0, coord[0] - np.floor_divide(width, 4))):int(
-                             np.maximum(coord[0] + width + np.floor_divide(width, 4), edges.shape[1]))]
-                    filename = base_folder + 'p' + str(n + 1) + "/" + base_filename + '_crater' + str(
-                        num_craters) + '_at_x' + str(coord[0]) + 'w' + str(width) + 'at_y' + str(
-                        coord[1]) + 'h' + str(height)
+                    filename = base_folder + "craters/" + base_filename + '_crater' + str(
+                        num_craters) + '_at_x' + str(int(np.floor_divide(coord[0],1))) + 'w' + str(int(np.floor_divide(width))) + 'at_y' + str(
+                        int(np.floor_divide(coord[1]))) + 'h' + str(int(np.floor_divide(height)))
                     num_craters = num_craters + 1
-                    im2 = Image.fromarray(im)
-                    im2.save(filename + '.png')
+
+            else:
+                filename = base_folder + "craters/" + base_filename + '_little_crater' + str(
+                    num_lil_craters) + '_at_x' + str(int(np.floor_divide(coord[0]))) + 'w' + str(int(np.floor_divide(width)))+ 'at_y' + str(
+                    int(np.floor_divide(coord[1]))) + 'h' + str(int(np.floor_divide(height)))
+                num_lil_craters = num_lil_craters + 1
+
+            im2 = Image.fromarray(im)
+            im2.save(filename + '.png')
 
                     #cycles = sm.findCycles(drawGraph(segments[first:last]))
         #if (len(cycles) > 0):

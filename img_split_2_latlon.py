@@ -34,9 +34,6 @@ for n in (26):
     y_pos[1] = y_pos[0] + p_size[0]
     x_pos[1] = x_pos[0] + p_size[1]
 
-
-
-
 for m in len(folder_switch):
     folder_name = folder_switch[m]
     if not os.path.isfile(base_folder + folder_name):

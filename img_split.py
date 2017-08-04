@@ -20,8 +20,8 @@ for n in (25,39,43,57,64):
     height = im.shape[0]
     w_cuts = np.multiply(np.floor_divide(width, output_size[1]), np.divide(output_size[1], stride[1]))
     h_cuts = np.multiply(np.floor_divide(height, output_size[0]), np.divide(output_size[0], stride[0]))
-    for i in range(w_cuts):
-        for j in range(h_cuts):
+    for i in range(w_cuts+1):
+        for j in range(h_cuts+1):
             x_off = np.multiply(i, stride[1])
             y_off = np.multiply(j, stride[0])
             #image = np.asarray(im)
