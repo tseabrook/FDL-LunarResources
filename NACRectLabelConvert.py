@@ -1,12 +1,13 @@
 import glob, os
 from PIL import Image
 import numpy as np
+from lxml.etree import fromstring, tostring
 import matplotlib.pyplot as plt
 from skimage import io
 from osgeo import gdal
-import Pascal_voc_io as PascalVoc
 import json
 from pprint import pprint
+import xml.etree.ElementTree as ET
 
 
 #The purpose of this file is to stitch together images that belong to the same map.
@@ -63,9 +64,9 @@ def tileID_to_x_y(id, width, height, order = 'TopBottom'):
     return x, y
 
 def get_box_corners(x,y,width,height):
-    xMin = x*width
+    xMin = x*(width/2)
     xMax = xMin + width
-    yMin = y*height
+    yMin = y*(height/2)
     yMax = yMin + height
     return xMin, xMax, yMin, yMax
 
@@ -92,39 +93,80 @@ def checkUniqueBox(bbox, uniqueBoxes):
 
 annotationDir = '/Users/seabrook/Documents/FDL/FDL-LunarResources/PDS_FILES/LROC_NAC/annotations/'
 uniqueBoxes = []
-PASCALVOC_filename = annotationDir+'PV_annotations.json'
-if(os.path.isfile(PASCALVOC_filename)):
-    output = json.load(open(PASCALVOC_filename))
-    uniqueBoxes = output['object']
-else:
-    output = {'object': []}
+num_craters = 0
+
+pos_file_names = glob.glob(annotationDir+'*.xml')
+for filename in pos_file_names:
+
+    tree = ET.parse(filename)
+    root = tree.getroot()
+    source_name = root.find('filename').text.split('.')[0]
+
+    output_filename = annotationDir+source_name+'_VOC.json'
+
+    if (os.path.isfile(output_filename)):
+        output = json.load(open(output_filename))
+        uniqueBoxes = output['object']
+        num_craters = num_craters + len(uniqueBoxes)
+    else:
+        output = {'object': []}
+        uniqueBoxes = []
+
+    for object in root.findall('object'):
+        bndbox = object._children[4]
+        voc_annotation = {
+            "bndbox": {
+                "xmax": bndbox._children[2].text,
+                "xmin": bndbox._children[0].text,
+                "ymax": bndbox._children[3].text,
+                "ymin": bndbox._children[1].text,},
+            "difficult": object._children[3].text,
+            "name": object._children[0].text,
+        }
+        bbox = checkUniqueBox(voc_annotation, uniqueBoxes)
+        if (len(bbox) > 0):
+            output['object'].append(voc_annotation)
+        else:
+            print('repeated box')
+        num_craters += 1
+
+    with open(output_filename, 'w') as outfile:
+        json.dump(output, outfile)
 
 #Pulling files
 pos_file_names = glob.glob(annotationDir+'*[0-9]*.json')
 for filename in pos_file_names:
-    #try:
-    # Read annotation.json (Assume format of RectLabel output)
-    data = json.load(open(filename))
-    xPix, yPix = data['image_w_h']  # Width and height of original image
+    if not filename.endswith('_VOC.json'):
 
-    #Find corner pixels of cut piece depending on index
-    xMin, xMax, yMin, yMax = get_box_corners(0,0,xPix,yPix)
+        data = json.load(open(filename))
 
-    #Convert each object from RectLabel to PASCAL_VOC
-    for object in data['objects']:
-        voc_annotation = RectLabel_2_PASCAL_VOC(object, [xMin, xMax, yMin, yMax], 'crater')
-        bbox = checkUniqueBox(voc_annotation, uniqueBoxes)
-        if(len(bbox) > 0):
-            output['object'].append(voc_annotation)
-        else:
-            print('repeated box')
-    #except:
-    ##    print(filename+' does not fit format.')
+        xPix, yPix =  data.get('image_w_h', [None, None])  # Width and height of original image
+        if(xPix != None): #Then the json file is [for our files] of RectLabel format.
 
-with open(PASCALVOC_filename, 'w') as outfile:
-    json.dump(output, outfile)
+            output_filename = filename.split('.')[0]+'_VOC.json'
 
+            if (os.path.isfile(output_filename)):
+                output = json.load(open(output_filename))
+                uniqueBoxes = output['object']
+                num_craters = num_craters + len(uniqueBoxes)
+            else:
+                output = {'object': []}
+                uniqueBoxes = []
 
-#
-#
-#
+            #Find corner pixels of cut piece depending on index
+            xMin, xMax, yMin, yMax = get_box_corners(0,0,xPix,yPix)
+
+            #Convert each object from RectLabel to PASCAL_VOC
+            for object in data['objects']:
+                voc_annotation = RectLabel_2_PASCAL_VOC(object, [xMin, xMax, yMin, yMax], 'crater')
+                bbox = checkUniqueBox(voc_annotation, uniqueBoxes)
+                if(len(bbox) > 0):
+                    output['object'].append(voc_annotation)
+                else:
+                    print('repeated box')
+                num_craters += 1
+
+            with open(output_filename, 'w') as outfile:
+                json.dump(output, outfile)
+
+    print num_craters

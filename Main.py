@@ -506,7 +506,6 @@ def main():
         np.save('imgs/regionMap_counts_150-3D.npy', regionCounts)
 
 
-
     maxRegion = np.where(regionCounts == np.max(regionCounts))
     regionIndices = np.where(regionMap == maxRegion)
     #z_ind = regionIndices[0]

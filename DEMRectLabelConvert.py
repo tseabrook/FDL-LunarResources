@@ -4,10 +4,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from skimage import io
 from osgeo import gdal
-import Pascal_voc_io as PascalVoc
 import json
 from pprint import pprint
-
+import xml.etree.ElementTree as ET
+import matplotlib.patches as patches
 
 #The purpose of this file is to stitch together images that belong to the same map.
 #These images have previously been cut up to make annotating those images an easier task.
@@ -80,27 +80,26 @@ from pprint import pprint
 #   We don't need to restitch the images together.
 #   However, we do need to restitch the annotations,
 #     and reinstate properly coordinates
-#
 
 def tileID_to_x_y(id, width, height, order = 'TopBottom'):
     # Find indexes of cut piece depending on tiling order
     if (order == 'TopBottom'):
         x = np.floor_divide(id, height)
-        y = np.mod(cut_id, height)
+        y = np.mod(id, height)
     elif (order == 'LeftRight'):
         y = np.floor_divide(id, width)
-        x = np.mod(cut_id, width)
+        x = np.mod(id, width)
     else:
         print('expected order: TopBottom or LeftRight, assumed former.')
         x = np.floor_divide(id, height)
-        y = np.mod(cut_id, height)
+        y = np.mod(id, height)
 
     return x, y
 
 def get_box_corners(x,y,width,height):
-    xMin = x*width
+    xMin = x*(width/2) #Stride is a half
     xMax = xMin + width
-    yMin = y*height
+    yMin = y*(height/2) #Stride is a half
     yMax = yMin + height
     return xMin, xMax, yMin, yMax
 
@@ -109,9 +108,9 @@ def RectLabel_2_PASCAL_VOC(object, corners, name, difficult = False):
     xMin, xMax, yMin, yMax = corners
     voc_annotation = {
         "bndbox": {
-            "xmax": xMax + x + w,
+            "xmax": xMin + x + w,
             "xmin": xMin + x,
-            "ymax": yMax + y + h,
+            "ymax": yMin + y + h,
             "ymin": yMin + y, },
         "difficult": difficult,
         "name": name,
@@ -130,50 +129,107 @@ xSplits = 236
 ySplits = 236
 
 order = 'TopBottom'
-annotationDir = '/Users/seabrook/Documents/FDL/FDL-LunarResources/PDS_FILES/LROC_DEM/annotations/'
+rootDir = '/Users/seabrook/Documents/FDL/FDL-LunarResources/PDS_FILES/LROC_BigDEM/TimSort/6000-8999/'
+annotationDir = rootDir + 'Annotation/'
 uniqueBoxes = []
-PASCALVOC_filename = annotationDir+'PV_annotations.json'
+#PASCALVOC_filename = annotationDir+'PV_annotations.json'
 if(os.path.isfile(PASCALVOC_filename)):
     output = json.load(open(PASCALVOC_filename))
     uniqueBoxes = output['object']
 else:
     output = {'object': []}
 
-#Pulling files
-pos_file_names = glob.glob(annotationDir+'*[0-9].json')
+pos_file_names = glob.glob(annotationDir+'*.xml')
 for filename in pos_file_names:
-    #try:
-    source_file, cut_id = filename.split('_cut')
+
+    srcImage, cut_id = filename.split('_cut')
+
+
     cut_id, ext = cut_id.split('.')
-    cut_id = int(cut_id) #convert ID from string
+
+    srcImage = srcImage.split(rootDir)[-1].split('/')[-1]
+    srcImage = rootDir + 'Crater/' + srcImage + '_cut' + cut_id + '.tif'
+
+    cut_id = int(cut_id)  # convert ID from string
+
+    tree = ET.parse(filename)
+    root = tree.getroot()
 
     # Read annotation.json (Assume format of RectLabel output)
-    data = json.load(open(filename))
-    xPix, yPix = data['image_w_h']  # Width and height of original image
+    xPix, yPix = int(root.find('size')._children[0].text), int(root.find('size')._children[1].text) # Width and height of original image
     xTileMax = xPix * xSplits
     yTileMax = yPix * ySplits
 
-    #Convert TileID to x,y poss
+    # Convert TileID to x,y poss
     x_ind, y_ind = tileID_to_x_y(cut_id, xSplits, ySplits)
 
-    #Find corner pixels of cut piece depending on index
-    xMin, xMax, yMin, yMax = get_box_corners(x_ind,y_ind,xPix,yPix)
+    # Find corner pixels of cut piece depending on index
+    xMin, xMax, yMin, yMax = get_box_corners(x_ind, y_ind, xPix, yPix)
 
-    #Convert each object from RectLabel to PASCAL_VOC
-    for object in data['objects']:
-        voc_annotation = RectLabel_2_PASCAL_VOC(object, [xMin, xMax, yMin, yMax], 'crater')
+    for object in root.find('object')[0]:
+        bndbox = object._children[4]
+
+        ds = gdal.Open(srcImage)
+        img = np.array(ds.GetRasterBand(1).ReadAsArray())
+
+        fig, ax = plt.subplots(1)
+        ax.imshow(img, cmap='gray')
+        ax.add_patch(
+            patches.Rectangle(
+                [int(bndbox._children[0].text)-1, int(bndbox._children[1].text)-1], (int(bndbox._children[2].text) - int(bndbox._children[0].text)),
+                (int(bndbox._children[3].text) - int(bndbox._children[1].text)),  # (x,y), width, height
+                fill=False
+            )
+        )
+
+        voc_annotation = {
+            "bndbox": {
+                "xmax": int(bndbox._children[2].text)-1 + xMin,
+                "xmin": int(bndbox._children[0].text)-1 + xMin,
+                "ymax": int(bndbox._children[3].text)-1 + yMin,
+                "ymin": int(bndbox._children[1].text)-1 + yMin,},
+            "difficult": object._children[3].text,
+            "name": object._children[0].text,
+        }
         bbox = checkUniqueBox(voc_annotation, uniqueBoxes)
-        if(len(bbox) > 0):
+        if (len(bbox) > 0):
             output['object'].append(voc_annotation)
         else:
             print('repeated box')
-    #except:
-    ##    print(filename+' does not fit format.')
 
-with open(PASCALVOC_filename, 'w') as outfile:
-    json.dump(output, outfile)
+    with open(rootDir + 'Crater/' + srcImage + '_cut' + cut_id + '_bbox.json', 'w') as outfile:
+        json.dump(output, outfile)
 
-
+#Pulling files
+# pos_file_names = glob.glob(annotationDir+'*[0-9].json')
+# for filename in pos_file_names:
+#     #try:
+#     source_file, cut_id = filename.split('_cut')
+#     cut_id, ext = cut_id.split('.')
+#     cut_id = int(cut_id) #convert ID from string
 #
+#     # Read annotation.json (Assume format of RectLabel output)
+#     data = json.load(open(filename))
+#     xPix, yPix = data['image_w_h']  # Width and height of original image
+#     xTileMax = xPix * xSplits
+#     yTileMax = yPix * ySplits
 #
+#     #Convert TileID to x,y poss
+#     x_ind, y_ind = tileID_to_x_y(cut_id, xSplits, ySplits)
 #
+#     #Find corner pixels of cut piece depending on index
+#     xMin, xMax, yMin, yMax = get_box_corners(x_ind,y_ind,xPix,yPix)
+#
+#     #Convert each object from RectLabel to PASCAL_VOC
+#     for object in data['objects']:
+#         voc_annotation = RectLabel_2_PASCAL_VOC(object, [xMin, xMax, yMin, yMax], 'crater')
+#         bbox = checkUniqueBox(voc_annotation, uniqueBoxes)
+#         if(len(bbox) > 0):
+#             output['object'].append(voc_annotation)
+#         else:
+#             print('repeated box')
+#     #except:
+#     ##    print(filename+' does not fit format.')
+#
+# with open(PASCALVOC_filename, 'w') as outfile:
+#     json.dump(output, outfile)
