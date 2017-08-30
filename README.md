@@ -19,10 +19,11 @@ During the production of the digital elevation model, synthetic artefacts were i
 The artefacts represent several different forms of noise, the most troublesome of which appears as thin but large walls and gorges across the surface of the image that are not present in reality.
 These artefacts greatly reduced the ability for an automated traverse search. In practice, a team will take a region of interest and spend a lot of time cleaning the artefacts by hand.
 
-A conventional approach to artefact removal might be based on the correlation of multiple images of the same static target. If an element of one image doesn't appear in the others then it is likely an artefact.
-The higher 0.5m resolution NAC images provide an opportunity for this (compared to 10m resolution DEM), however the optical images are not properly registered to lunar coordinates.
-The LOLA DEM acts as the baseline registration of lunar features to a coordinate system. Whilst NAC optical images do contain latitude and longitude information, it is accurate only to minutes (i.e. circumference/(360deg*60m) = ~500metres).
-In order to correlate optical images with the elevation model coregistration between the two images needs to take place.
+A conventional approach to artefact removal might be based on the correlation of multiple images of the same static target. If an element of one image doesn't appear in the others then that element is likely an artefact.
+The higher 0.5m resolution NAC images provide an opportunity to identify artefacts in the 20m resolution DEM. However, the NAC images are not properly registered to lunar coordinates.
+
+The LOLA DEM acts as a baseline registration of lunar features to a coordinate system. Whilst NAC optical images do contain latitude and longitude information, they are only accurate to degree minutes (i.e. circumference/(360deg*60mins) <= approx. 500metres).
+In order to correlate optical NAC images with the DEM and remove artefacts, coregistration between the two images needs to take place first.
 
 A common approach to coregistration involves feature matching, where features common to both images are identified and the highest likelihood pairing of those features gives a transformation matrix to overlay the images.
 Lunar craters are irregular in distribution and shape and very plentiful. As such, craters make great features with which to coregister the LRO NAC and LOLA DEM images.
