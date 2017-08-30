@@ -33,6 +33,9 @@ Once trained, the Deep Neural Network is able to identify unlabelled examples of
 
 # Future Work
 Following feature identification, a segmentation algorithm should be used to extract the pixels that constitute the crater to accurately pinpoint the location.
+
 Feature matching can be achieved using SIFT or other more modern techniques.
+
 Correlation of images might be performed by illumating the digital elevation model to the same conditions as present in the optical image before using a subtractive or divisive approach.
+
 Thresholding represents the simplest approach to determining artefact removal, however the removal of elements falsely identified as artefacts poses a great risk to missions and should be avoided at all costs.
