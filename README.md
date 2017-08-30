@@ -1,11 +1,11 @@
 # FDL2017: Lunar Water and Volatiles
-FDL2017 Lunar Water and Volatiles Project. Contributions by Dietmar Backes, Timothy Seabrook, Eleni Bohacek, Anthony Dobrovolskis.
+Contributions by Dietmar Backes, Timothy Seabrook, Eleni Bohacek, Anthony Dobrovolskis.
 
 This repository represents the work of the Frontier Development Labs 2017: Lunar Water and Volatiles team.
 
 NASA's LCROSS mission indicated that water is present in the permanently shadowed regions of the Lunar poles. Water is a key resource for human spaceflight, not least for astronaut life-support but also as an ingredient for rocket fuels.
 
-It is important that the presence of water is further quantified, through rover missions such as NASA's Resource Prospector (RP) mission.
+It is important that the presence of Lunar water is further quantified through rover missions such as NASA's Resource Prospector (RP).
 RP will be required to traverse the lunar polar regions and evaluate water distribution by periodically drilling to suitable depths to retrieve samples for analysis.
 
 In order to maximise the value of RP and of future missions, it is important for robust and effective plans to be constructed.
