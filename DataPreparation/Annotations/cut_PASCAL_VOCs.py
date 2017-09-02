@@ -9,6 +9,9 @@ import json
 from pprint import pprint
 import matplotlib.patches as patches
 
+#cut_PASCAL_VOCs takes annotations in the PASCAL_VOC format
+#  and draws them to an image
+
 #Variables Definition:
 xSplits = 236
 ySplits = 236

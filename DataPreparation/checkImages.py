@@ -3,6 +3,15 @@ import glob, os
 import numpy as np
 from osgeo import gdal
 
+#Check images takes tiles that have been previously cut
+#And asserts whether they are the correct size
+#If the size of the tile is not correct, then the source image is loaded
+#So that adjacent pixels can be added to the tiles.
+#This was necessary due to a coding error in the img_split script.
+
+#CHECK IMAGES is written to operate on cuts numbered incrementally
+#CLEAN IMAGES is written to operate on cuts identifed with x1 and y1 coordinates
+
 output_size = [32,32]
 stride = np.divide(output_size, 2)
 
@@ -155,142 +164,142 @@ for filename in pos_file_names:
             # If h_pos is 0, then left is empty
             # If h_pos equals h_cuts, then right is empty
 
-            if((searchImg == False)):
-                if(not((height == 32) & (width == 32))):
-                    saveImage = False
 
-                    h_diff = 32 - width
-                    v_diff = 32 - height
+            if(not((height == 32) & (width == 32))):
+                saveImage = False
 
-                    #v1 = v_pos * stride[0]  # top row of cut
-                    #v2 = v1 + height  # bottom row of cut
-                    #h1 = h_pos * stride[1]  # left column of cut
-                    #h2 = h1 + width  # right column of cut
+                h_diff = 32 - width
+                v_diff = 32 - height
 
-                    if h_diff < 0:  # If cut is too wide
-                        image = image[:][:h_diff]  # (diff is minus from end)
-                        saveImage = True
-                    if v_diff < 0:  # If cut is too tall
-                        image = image[:v_diff][:]  # (diff is minus from end)
-                        saveImage = True
+                #v1 = v_pos * stride[0]  # top row of cut
+                #v2 = v1 + height  # bottom row of cut
+                #h1 = h_pos * stride[1]  # left column of cut
+                #h2 = h1 + width  # right column of cut
 
-                    if h_diff > 0:  # If cut is not wide enough
-                        if h_pos != 0:  # If not leftmost
-                            if h_pos == h_cuts:  # rightmost cut
-                                checkRight = True
-                                h_add = 0
-                                while((checkRight) & (h_add < h_underflow)):
-                                    if((np.mean(image2[v1:v2,h2+h_add+1], axis=0) > 3) and (h_add < h_diff)):
-                                        h_add += 1
-                                    else:
-                                        checkRight = False
-                                image = image2[v1:v2,(h1 - (h_diff - h_add)):h2 + h_add]
-                                h1 = h1 - (h_diff - h_add)
-                                h2 = h2 + h_add
-                                saveImage = True
-                            else:  # middle cut
-                                h_add1 = np.floor_divide(h_diff, 2)
-                                h_add2 = h_add1 + (h_diff - (2 * h_add1))
+                if h_diff < 0:  # If cut is too wide
+                    image = image[:][:h_diff]  # (diff is minus from end)
+                    saveImage = True
+                if v_diff < 0:  # If cut is too tall
+                    image = image[:v_diff][:]  # (diff is minus from end)
+                    saveImage = True
 
-                                checkRight = True
-                                h_add = 0
-                                while (checkRight & ((h2 + h_add) < width2)):
-                                    if ((np.mean(image2[v1:v2, h2 + h_add + 1], axis=0) > 3) and (h_add < h_add2)):
-                                        h_add += 1
-                                    else:
-                                        checkRight = False
+                if h_diff > 0:  # If cut is not wide enough
+                    if h_pos != 0:  # If not leftmost
+                        if h_pos == h_cuts:  # rightmost cut
+                            checkRight = True
+                            h_add = 0
+                            while((checkRight) & (h_add < h_underflow)):
+                                if((np.mean(image2[v1:v2,h2+h_add+1], axis=0) > 3) and (h_add < h_diff)):
+                                    h_add += 1
+                                else:
+                                    checkRight = False
+                            image = image2[v1:v2,(h1 - (h_diff - h_add)):h2 + h_add]
+                            h1 = h1 - (h_diff - h_add)
+                            h2 = h2 + h_add
+                            saveImage = True
+                        else:  # middle cut
+                            h_add1 = np.floor_divide(h_diff, 2)
+                            h_add2 = h_add1 + (h_diff - (2 * h_add1))
 
-                                h_add1 += (h_add2 - h_add)
-                                h_add2 = h_add
+                            checkRight = True
+                            h_add = 0
+                            while (checkRight & ((h2 + h_add) < width2)):
+                                if ((np.mean(image2[v1:v2, h2 + h_add + 1], axis=0) > 3) and (h_add < h_add2)):
+                                    h_add += 1
+                                else:
+                                    checkRight = False
 
-                                # No need to check if still in bounds, since h_diff < output_size
-                                image = image2[v1:v2,(h1 - h_add1):h2+h_add2]
+                            h_add1 += (h_add2 - h_add)
+                            h_add2 = h_add
 
-                                h1 = h1 - h_add1
-                                h2 = h2 + h_add2
+                            # No need to check if still in bounds, since h_diff < output_size
+                            image = image2[v1:v2,(h1 - h_add1):h2+h_add2]
 
-                                saveImage = True
-                        elif h_pos != h_cuts:  # leftmost cut, but not rightmost
-                            image = image2[v1:v2,h1:(h2+h_diff)]
-
-                            h2 = h2 + h_diff
-                            saveImage = True  # save
-                        elif h_underflow >= h_diff: #leftmost and rightmost cut, but buffer remains
-                            if (np.mean(np.mean(image2[v1:v2, h1:h2+h_diff], axis=0)) > 3): #If all of buffer is not black
-                                image = image2[v1:v2, h1:h2+h_add] #add buffer
-                                saveImage = True #save
-                                h2 = h2 + h_add
-
-                    if v_diff > 0:  # If cut is not tall enough
-                        if v_pos != 0:  # If not top
-                            if v_pos == v_cuts:  # bottom cut
-
-                                checkBottom = True
-                                v_add = 0
-                                while (checkBottom & (v_add < v_underflow)):
-                                    if ((np.mean(image2[v2 + v_add + 1,h1:h2]) > 3) and (v_add < v_diff)):
-                                        v_add += 1
-                                    else:
-                                        checkBottom = False
-                                image = image2[(v1 - v_diff + v_add):v2+v_add,h1:h2]
-                                v1 = v1 - (v_diff - v_add)
-                                v2 = v2 + v_add
-                                saveImage = True  # save
-                            else:  # middle cut
-                                v_add1 = np.floor_divide(v_diff, 2)
-                                v_add2 = v_add1 + (v_diff - (2 * v_add1))
-
-                                checkBottom = True
-                                v_add = 0
-                                while (checkBottom & ((v2 + v_add) < height2)):
-                                    if ((np.mean(image2[v2 + v_add + 1,h1:h2]) > 3) and (v_add < v_add2)):
-                                        v_add += 1
-                                    else:
-                                        checkBottom = False
-
-                                v_add1 += (v_add2 - v_add)
-                                v_add2 = v_add
-
-                                # No need to check if still in bounds, since h_diff < output_size
-                                image = image2[(v1 - v_add1):v2 + v_add2,h1:h2]
-
-                                v1 = v1 - v_add1
-                                v2 = v2 + v_add
-
-                                saveImage = True #save
-                        elif v_pos != v_cuts:  # If top cut, not bottom
-                            image = image2[v1:(v2 + v_diff),h1:h2]
-
-                            v2 = v2 + v_diff
+                            h1 = h1 - h_add1
+                            h2 = h2 + h_add2
 
                             saveImage = True
-                        elif v_underflow >= v_diff: #bottom and top cut, but buffer remains
+                    elif h_pos != h_cuts:  # leftmost cut, but not rightmost
+                        image = image2[v1:v2,h1:(h2+h_diff)]
+
+                        h2 = h2 + h_diff
+                        saveImage = True  # save
+                    elif h_underflow >= h_diff: #leftmost and rightmost cut, but buffer remains
+                        if (np.mean(np.mean(image2[v1:v2, h1:h2+h_diff], axis=0)) > 3): #If all of buffer is not black
+                            image = image2[v1:v2, h1:h2+h_add] #add buffer
+                            saveImage = True #save
+                            h2 = h2 + h_add
+
+                if v_diff > 0:  # If cut is not tall enough
+                    if v_pos != 0:  # If not top
+                        if v_pos == v_cuts:  # bottom cut
+
                             checkBottom = True
                             v_add = 0
-                            if(np.mean(np.mean(image2[v1:v2 + v_diff, h1:h2], axis=1)) > 3):
-                                image = image2[v1:v2+v_add,h1:h2]
-                                saveImage = True
+                            while (checkBottom & (v_add < v_underflow)):
+                                if ((np.mean(image2[v2 + v_add + 1,h1:h2]) > 3) and (v_add < v_diff)):
+                                    v_add += 1
+                                else:
+                                    checkBottom = False
+                            image = image2[(v1 - v_diff + v_add):v2+v_add,h1:h2]
+                            v1 = v1 - (v_diff - v_add)
+                            v2 = v2 + v_add
+                            saveImage = True  # save
+                        else:  # middle cut
+                            v_add1 = np.floor_divide(v_diff, 2)
+                            v_add2 = v_add1 + (v_diff - (2 * v_add1))
 
+                            checkBottom = True
+                            v_add = 0
+                            while (checkBottom & ((v2 + v_add) < height2)):
+                                if ((np.mean(image2[v2 + v_add + 1,h1:h2]) > 3) and (v_add < v_add2)):
+                                    v_add += 1
+                                else:
+                                    checkBottom = False
+
+                            v_add1 += (v_add2 - v_add)
+                            v_add2 = v_add
+
+                            # No need to check if still in bounds, since h_diff < output_size
+                            image = image2[(v1 - v_add1):v2 + v_add2,h1:h2]
+
+                            v1 = v1 - v_add1
                             v2 = v2 + v_add
 
-                    height, width = (v2 - v1), (h2 - h1)  # Read width and height
-                    if((height == 32) & (width == 32)):
-                        if(saveImage == True):
-                            output_filename = targetDir + originalFilename.split(imageDir)[1].split('.')[0] + '_d40' + '_x' + str(h1) + '_y' + str(v1) + '.tif'
-                            image = Image.fromarray(image)
-                            image.save(output_filename)
-                    else:
-                        output_filename = targetDir + 'failReshape' + originalFilename.split(imageDir)[1].split('.')[
-                            0] + '_d40' + '_x' + str(h1) + '_y' + str(v1) + '.tif'
+                            saveImage = True #save
+                    elif v_pos != v_cuts:  # If top cut, not bottom
+                        image = image2[v1:(v2 + v_diff),h1:h2]
+
+                        v2 = v2 + v_diff
+
+                        saveImage = True
+                    elif v_underflow >= v_diff: #bottom and top cut, but buffer remains
+                        checkBottom = True
+                        v_add = 0
+                        if(np.mean(np.mean(image2[v1:v2 + v_diff, h1:h2], axis=1)) > 3):
+                            image = image2[v1:v2+v_add,h1:h2]
+                            saveImage = True
+
+                        v2 = v2 + v_add
+
+                height, width = (v2 - v1), (h2 - h1)  # Read width and height
+                if((height == 32) & (width == 32)):
+                    if(saveImage == True):
+                        output_filename = targetDir + originalFilename.split(imageDir)[1].split('.')[0] + '_d40' + '_x' + str(h1) + '_y' + str(v1) + '.tif'
                         image = Image.fromarray(image)
                         image.save(output_filename)
-                        # os.remove(filename)
                 else:
-                    output_filename = targetDir + originalFilename.split(imageDir)[1].split('.')[0] + '_d40' + '_x' + str(h1) + '_y' + str(v1) + '.tif'
+                    output_filename = targetDir + 'failReshape' + originalFilename.split(imageDir)[1].split('.')[
+                        0] + '_d40' + '_x' + str(h1) + '_y' + str(v1) + '.tif'
                     image = Image.fromarray(image)
                     image.save(output_filename)
+                    # os.remove(filename)
             else:
-                output_filename = targetDir + 'failFind' + originalFilename.split(imageDir)[1].split('.')[0] + '_d40' + '_x' + str(
-                    h1) + '_y' + str(v1) + '.tif'
+                output_filename = targetDir + originalFilename.split(imageDir)[1].split('.')[0] + '_d40' + '_x' + str(h1) + '_y' + str(v1) + '.tif'
                 image = Image.fromarray(image)
                 image.save(output_filename)
+        else:
+            output_filename = targetDir + 'failFind' + originalFilename.split(imageDir)[1].split('.')[0] + '_d40' + '_x' + str(
+                h1) + '_y' + str(v1) + '.tif'
+            image = Image.fromarray(image)
+            image.save(output_filename)

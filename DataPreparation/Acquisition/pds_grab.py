@@ -4,8 +4,16 @@ from lxml import html
 import requests
 import numpy as np
 import threading
-from Main import timerInformation
+import sys
+
+sys.path.append('../../Miscellanious/')
+
+from timerInformation import timerInformation
 from timeit import default_timer as timer
+
+#PDS_GRAB
+#This script reads a .txt file containing a list of desired NAC images
+#The .txt file should contain more than zero rows with the first column containing NAC product IDs.
 
 def saveImage(url, path):
     req = urllib2.Request(url)
@@ -15,7 +23,9 @@ def saveImage(url, path):
         outfile.write(imgdata)
 
 #https://stackoverflow.com/questions/16989647/importing-large-tab-delimited-txt-file-into-python
-filename = '/Volumes/DATA DISK/PDS_FILES/LROC_NAC/P26_0-18000.txt'
+#rootDir = '/Volumes/DATA DISK/PDS_FILES/LROC_NAC/'
+rootDir = os.getcwd()
+filename = rootDir+'P26_0-18000.txt'
 file_object  = open(filename, 'r')
 
 threads = []
@@ -30,7 +40,6 @@ time_elapsed = 0  # Initialise time elapsed for timer
 start = timer()  # Initialise timer
 
 for i in range(1,len(d)):
-
     # BEGIN TIMER UPDATE SECTION
     new_perc_complete = np.floor_divide(i * 100, len(d))  # update percentage complete integer
     if new_perc_complete > perc_complete:  # if integer is higher than last
@@ -44,7 +53,7 @@ for i in range(1,len(d)):
     productURL = 'http://moon.asu.edu/planetview/inst/lroc/'+product_id
     print('Connected!')
     filetype = '.tif'
-    save_path = "/Volumes/DATA DISK/PDS_FILES/LROC_NAC/"+product_id+filetype
+    save_path = rootDir+product_id+filetype
 
     #http://python-guide-pt-br.readthedocs.io/en/latest/scenarios/scrape/
     page = requests.get(productURL)

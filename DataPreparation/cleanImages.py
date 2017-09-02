@@ -3,6 +3,15 @@ import glob, os
 import numpy as np
 from osgeo import gdal
 
+#Check images takes tiles that have been previously cut
+#And asserts whether they are the correct size
+#If the size of the tile is not correct, then the source image is loaded
+#So that adjacent pixels can be added to the tiles.
+#This was necessary due to a coding error in the img_split script.
+
+#CLEAN IMAGES is written to operate on cuts identifed with x1 and y1 coordinates
+#CHECK IMAGES is written to operate on cuts numbered incrementally
+
 #imageDir = '/Users/seabrook/Documents/FDL/FDL-LunarResources/PDS_FILES/LROC_NAC/annotations/'
 
 gdal.UseExceptions()

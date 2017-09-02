@@ -59,14 +59,14 @@ for n in (25,39,43,57,64):
     im = np.array(ds.GetRasterBand(1).ReadAsArray())
     width = im.shape[1]
     height = im.shape[0]
-    w_cuts = np.multiply(np.floor_divide(width, output_size[1]), np.divide(output_size[1], stride[1]))
-    h_cuts = np.multiply(np.floor_divide(height, output_size[0]), np.divide(output_size[0], stride[0]))
+    w_cuts = np.multiply(np.floor_divide(width, cut_size[1]), np.divide(cut_size[1], stride[1]))
+    h_cuts = np.multiply(np.floor_divide(height, cut_size[0]), np.divide(cut_size[0], stride[0]))
     for i in range(w_cuts):
         for j in range(h_cuts):
             x_off = np.multiply(i, stride[1])
             y_off = np.multiply(j, stride[0])
             #image = np.asarray(im)
-            image = im[y_off:y_off+output_size[0], x_off:x_off+output_size[1]]
+            image = im[y_off:y_off+cut_size[0], x_off:x_off+cut_size[1]]
             ind = (i*w_cuts + j)
             filename = base_folder+'p'+str(n+1)+"/"+base_filename+'_cut'+str(ind)
             im2 = Image.fromarray(image)
