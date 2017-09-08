@@ -9,12 +9,23 @@ gdal.UseExceptions()
 
 output_size = [32,32]
 stride = np.divide(output_size, 2)
-downsample_ratio = 40
-imageDir = '/Volumes/DATA DISK/PDS_FILES/LROC_NAC/LRO_New/Resampled - S3Server/'
+
+thisDir = os.path.dirname(os.path.abspath(__file__))
+rootDir = os.path.join(thisDir, os.pardir, os.pardir)
+dataDir = os.path.join(rootDir, 'Data')
+NACDir = os.path.join(dataDir, 'LROC_NAC', 'South_Pole', 'Resampled')
+TileDir = os.path.join(dataDir, 'LROC_NAC', 'South_Pole', 'Tiles')
+
+if(not os.path.isdir(NACDir)): #SUBJECT TO RACE CONDITION
+    print('No Images found, please first execute script: \'NAC2_Resample.py\'')
+
+if(not os.path.isdir(TileDir)): #SUBJECT TO RACE CONDITION
+    os.makedirs(TileDir)
+
 #resampledDir = imageDir + 'Resampled/'
 #imageDir = '/home/tseabrook/NAC_Images/'
 
-pos_file_names = glob.glob(imageDir+'*.tif')
+pos_file_names = glob.glob(os.path.join(NACDir,'*.tif'))
 for filename in pos_file_names:
     ds = gdal.Open(filename)
     im = ds.GetRasterBand(1).ReadAsArray()
@@ -31,17 +42,16 @@ for filename in pos_file_names:
                 for j in range(v_cuts):
                     x_off = np.multiply(i, stride[1]) #tile top-left x position
                     y_off = np.multiply(j, stride[0]) #tile top-left y position
-                    #image = np.asarray(im)
-                    image = im[y_off:y_off+output_size[0], x_off:x_off+output_size[1]]
-                    perc_dark = np.divide(np.sum((image < 10).astype(np.uint8)), (np.sum(image.size)))
+                    tile = im[y_off:y_off+output_size[0], x_off:x_off+output_size[1]]
+                    perc_dark = np.divide(np.sum((tile < 10).astype(np.uint8)), (np.sum(tile.size)))
                     if(perc_dark < 0.4): #Tile more than 40% illuminated
                         ind = ((i*v_cuts) + j)
 
-                        name, ext = filename.split('.')
-                        #name, downsample_ratio = name.split('_div')
-                        name = name.split(imageDir)[1]
+                        name = filename.split(os.path.join(NACDir, ''))[1]
+                        name, ext = name.split('.')
 
-                        output_filename = imageDir + 'Tiles/' + name \
-                            + '_x' + str(x_off) + '_y' + str(y_off) + '.' + ext
-                        im2 = Image.fromarray(image)
-                        im2.save(output_filename)
+                        output_filename = os.path.join(TileDir, name \
+                            + '_x' + str(x_off) + '_y' + str(y_off) + '.' + ext)
+                        if (not os.path.isfile(output_filename)):
+                            tile = Image.fromarray(tile)
+                            tile.save(output_filename)

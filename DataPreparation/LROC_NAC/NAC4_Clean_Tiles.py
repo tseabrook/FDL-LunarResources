@@ -3,26 +3,26 @@ import glob, os
 import numpy as np
 from osgeo import gdal
 
-#Check images takes tiles that have been previously cut
-#And asserts whether they are the correct size
-#If the size of the tile is not correct, then the source image is loaded
-#So that adjacent pixels can be added to the tiles.
-#This was necessary due to a coding error in the img_split script.
-
 #CLEAN IMAGES is written to operate on cuts identifed with x1 and y1 coordinates
-#CHECK IMAGES is written to operate on cuts numbered incrementally
-
-#imageDir = '/Users/seabrook/Documents/FDL/FDL-LunarResources/PDS_FILES/LROC_NAC/annotations/'
+#Clean images takes tiles that have been previously cut
+#Removes any dark rows and columns that surround the time
+#Asserts whether the tile is the correct size
+#If the size of the tile is not correct, then the source image is loaded
+#So that adjacent non-dark pixels can be added to the tiles.
 
 gdal.UseExceptions()
 
 output_size = [32,32]
 stride = np.divide(output_size, 2)
-downsample_ratio = 40
-imageDir = '/Volumes/DATA DISK/PDS_FILES/LROC_NAC/LRO_New/'
-resampledDir = imageDir + 'Resampled/'
+
+thisDir = os.path.dirname(os.path.abspath(__file__))
+rootDir = os.path.join(thisDir, os.pardir, os.pardir)
+dataDir = os.path.join(rootDir, 'Data')
+NACDir = os.path.join(dataDir, 'LROC_NAC', 'South_Pole', 'Resampled')
+TileDir = os.path.join(dataDir, 'LROC_NAC', 'South_Pole', 'Tiles')
+
 #Clean images
-pos_file_names = glob.glob(resampledDir + 'Tiles/' + '*.tif')
+pos_file_names = glob.glob(os.path.join(TileDir, '*.tif'))
 for filename in pos_file_names:
     ds = gdal.Open(filename)
     image = ds.GetRasterBand(1).ReadAsArray()
@@ -31,8 +31,8 @@ for filename in pos_file_names:
 
         height, width = image.shape  # Read width and height
 
-        originalFilename = imageDir + filename.split('.')[0].split(imageDir+'Tiles/')[1]  # Form original filename from this cut
-        originalFilename = originalFilename.split('_d')[0]  # Extract from filename
+        originalFilename = filename.split(TileDir)[1].split('.')[0]  # Form original filename from this tile
+        originalFilename = originalFilename.split('_x')[0]  # Extract from filename
         originalFilename += '.tif'  # Add file extension
         h1, v1 = filename.split('_x')[1].split('_y')
         v1 = int(v1.split('.')[0])
@@ -40,7 +40,7 @@ for filename in pos_file_names:
         h2 = h1 + width
         v2 = v1 + height
 
-        ds2 = gdal.Open(originalFilename)  # Open original File
+        ds2 = gdal.Open(os.path.join(NACDir, originalFilename))  # Open original File
         image2 = ds2.GetRasterBand(1).ReadAsArray()  # Read image data from original file
         if (image2 is not None):
             image2 = np.array(image2)  # If reading original image goes well (it should if the cut did)
@@ -58,12 +58,14 @@ for filename in pos_file_names:
             v_underflow = height2 - ((v_cuts+2)*stride[0])
             #The above calculations are valid because of stride being a half cut.
 
-            means = np.mean(image, axis=0)  # Trim black columns
-            h_del_ind = np.where(means <= 5)[0]
+
+            #For columns of tile.
+            means = np.mean(image, axis=0)
+            h_del_ind = np.where(means <= 5)[0] # Find dark columns
 
             shift_hpos = True
             shift_h = 0
-            while(shift_hpos):
+            while(shift_hpos): #From left to right
                 if any(h_del_ind == shift_h):
                     #image = np.delete(image, 0, 1) #Don't delete columns in middle of tile
                     shift_h += 1
@@ -72,9 +74,13 @@ for filename in pos_file_names:
             h1 += shift_h
             h2 += shift_h
 
+            image = image2[v1:v2, h1:h2]
+            means = np.mean(image, axis=0)
+            h_del_ind = np.where(means <= 5)[0] # Find dark columns
+
             shift_hrpos = True
             shift_hr = 0
-            while (shift_hrpos):
+            while (shift_hrpos): #From right to left
                 if any(h_del_ind == (h2-shift_hr-1-h1)):
                     #image = np.delete(image, h2-shift_hr, 1)  # Don't delete columns in middle of tile
                     shift_hr += 1
@@ -82,8 +88,10 @@ for filename in pos_file_names:
                     shift_hrpos = False
             h2 -= shift_hr
 
-            means = np.mean(image, axis=1)  # Trim black rows
-            v_del_ind = np.where(means <= 5)[0]
+
+            image = image2[v1:v2, h1:h2]
+            means = np.mean(image, axis=1)
+            v_del_ind = np.where(means <= 5)[0] # Find dark rows
 
             shift_vpos = True
             shift_v = 0
@@ -95,6 +103,10 @@ for filename in pos_file_names:
                     shift_vpos = False
             v1 += shift_v
             v2 += shift_v
+
+            image = image2[v1:v2, h1:h2]
+            means = np.mean(image, axis=1)
+            v_del_ind = np.where(means <= 5)[0] # Find dark rows
 
             shift_vbpos = True
             shift_vb = 0
@@ -154,10 +166,9 @@ for filename in pos_file_names:
                 if h_diff > 0:  # If cut is not wide enough
                     if h1 != 0:  # If not leftmost
                         if h2 == width2:  # rightmost cut
-
-                            image = image2[v1:v2,(h1 - h_diff):h2]
-                            h1 = h1 - h_diff
-                            saveImage = True
+                            if(np.min(np.mean(image2[v1:v2, (h1-h_diff):h2], axis=0)) > 3):
+                                h1 = h1 - h_diff
+                                saveImage = True
 
                         else:  # middle cut
                             h_add1 = np.floor_divide(h_diff, 2)
@@ -191,36 +202,26 @@ for filename in pos_file_names:
                                     h_add1 = h_diff - h_add2
 
                             if(h_add1 + h_add2 == h_diff):
-                                image = image2[v1:v2,(h1 - h_add1):h2+h_add2]
                                 h1 = h1 - h_add1
                                 h2 = h2 + h_add2
                                 saveImage = True
 
                     elif h2 != width2:  # leftmost cut, but not rightmost
-
-                        checkRight = True
-                        h_add = 0
-                        while (checkRight & ((h2 + h_add) < width2)):
-                            if ((np.mean(image2[v1:v2, h2 + h_add + 1], axis=0) > 3) and (h_add < h_diff)):
-                                h_add += 1
-                            else:
-                                checkRight = False
-
-                        if(h_add == h_diff):
+                        if (np.min(np.mean(image2[v1:v2, h2 + h_diff], axis=0)) > 3):
+                            h2 = h2+h_diff
                             saveImage = True  # save
 
                     elif h_underflow >= h_diff: #leftmost and rightmost cut, but buffer remains
-                        if (np.mean(np.mean(image2[v1:v2, h1:h2+h_diff], axis=0)) > 3): #If all of buffer is not black
-                            image = image2[v1:v2, h1:h2+h_add] #add buffer
+                        if (np.min(np.mean(image2[v1:v2, h1:h2+h_diff], axis=0)) > 3): #If all of buffer is not black
                             saveImage = True #save
-                            h2 = h2 + h_add
+                            h2 = h2 + h_diff
 
                 if v_diff > 0:  # If cut is not tall enough
                     if v1 != 0:  # If not top
                         if v2 == height2:  # bottom cut
-                            image = image2[(v1 - v_diff):v2,h1:h2]
-                            v1 = v1 - v_diff
-                            saveImage = True  # save
+                            if(np.min(np.mean(image2[v1-v_diff:v2, h1:h2], axis=0)) > 3):
+                                v1 = v1 - v_diff
+                                saveImage = True  # save
                         else:  # middle cut
                             v_add1 = np.floor_divide(v_diff, 2)
                             v_add2 = v_add1 + (v_diff - (2 * v_add1))
@@ -248,43 +249,45 @@ for filename in pos_file_names:
                             if (v_add == v_add2): #if sufficient found
                                 v_add2 = v_add
                                 v_add1 = v_diff - v_add2
-                            elif (v_add1 + v_add2 >= v_diff):  # h_add2 not reached, but enough pixels found overall
+                            elif (v_add1 + v_add2 >= v_diff):  # v_add2 not reached, but enough pixels found overall
                                 v_add1 = v_diff - v_add2
 
                             if (v_add1 + v_add2 == v_diff): #if sum is enough
                                 v1 = v1 - v_add1
                                 v2 = v2 + v_add2
-                                image = image2[v1:v2,h1:h2] #load from image
                                 saveImage = True #save
 
                     elif v2 != height2:  # If top cut, not bottom
-                        image = image2[v1:(v2 + v_diff),h1:h2]
+                        if (np.min(np.mean(image2[v1:(v2 + v_diff), h1:h2], axis=0)) > 3):
 
-                        v2 = v2 + v_diff
+                            v2 = v2 + v_diff
 
                         saveImage = True
                     elif v_underflow >= v_diff: #bottom and top cut, but buffer remains
                         checkBottom = True
                         v_add = 0
-                        if(np.mean(np.mean(image2[v1:v2 + v_diff, h1:h2], axis=1)) > 3):
-                            image = image2[v1:v2+v_add,h1:h2]
+                        if(np.min(np.mean(image2[v1:v2 + v_diff, h1:h2], axis=1)) > 3):
                             saveImage = True
 
                         v2 = v2 + v_add
 
                 height, width = (v2 - v1), (h2 - h1)  # Read width and height
+                image = image2[v1:v2, h1:h2]
                 if((height == 32) & (width == 32)):
                     if(saveImage == True):
-                        output_filename = imageDir + 'Tiles/' + originalFilename.split(imageDir)[1].split('.')[0] + '_x' + str(h1) + '_y' + str(v1) + '.tif'
+                        output_filename = os.path.join(TileDir, originalFilename.split('.')[0] + '_x' + str(h1) + '_y' + str(v1) + '.tif')
                         image = Image.fromarray(image)
                         image.save(output_filename)
                 else:
-                    output_filename = imageDir + 'Tiles/fail' + originalFilename.split(imageDir)[1].split('.')[
-                        0] + '_x' + str(h1) + '_y' + str(v1) + '.tif'
+                    if (not os.path.isdir(os.path.join(TileDir, 'fail'))):  # SUBJECT TO RACE CONDITION
+                        os.makedirs(os.path.join(TileDir, 'fail'))
+                    output_filename = os.path.join(TileDir, 'fail', originalFilename.split('.')[0] + '_x' + str(h1) + '_y' + str(v1) + '.tif')
                     image = Image.fromarray(image)
                     image.save(output_filename)
                     # os.remove(filename)
             else:
-                output_filename = imageDir + 'Tiles/fail' + originalFilename.split(imageDir)[1].split('.')[0] + '_x' + str(h1) + '_y' + str(v1) + '.tif'
+                if (not os.path.isdir(os.path.join(TileDir, 'fail'))):  # SUBJECT TO RACE CONDITION
+                    os.makedirs(os.path.join(TileDir, 'fail'))
+                output_filename = os.path.join(TileDir, 'fail', originalFilename.split('.')[0] + '_x' + str(h1) + '_y' + str(v1) + '.tif')
                 image = Image.fromarray(image)
                 image.save(output_filename)
