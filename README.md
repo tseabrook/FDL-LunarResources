@@ -1,5 +1,5 @@
 # FDL2017: Lunar Water and Volatiles
-Contributions by Dietmar Backes, Timothy Seabrook, Eleni Bohacek, Anthony Dobrovolskis.
+Contributions by Dietmar Backes, Timothy Seabrook, Eleni Bohacek, Anthony Dobrovolskis, Casey Handmer, Yarin Gal.
 
 This repository represents the work of the Frontier Development Labs 2017: Lunar Water and Volatiles team.
 
