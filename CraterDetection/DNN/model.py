@@ -1,5 +1,5 @@
 #Written by Yarin Gal
-#yg279@cam.ac.uk‎
+#yg279@cam.ac.uk
 
 from neon.data import ArrayIterator
 from neon import backends

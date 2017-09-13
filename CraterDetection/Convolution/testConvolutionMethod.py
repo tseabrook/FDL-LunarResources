@@ -57,120 +57,124 @@ dir_type = ['Crater', 'Not Crater']
 dir_extension = ['eleni-tim', 'shashi-tim']
 
 for img_dir in dir_type:
-    for dir_ext in dir_extension:
-        pos_file_names = glob.glob(os.path.join(NACDir, img_dir, dir_ext, '*.tif'))
-        if(pos_file_names.__len__ < 1):
-            print('Please check that you have extracted the \'.zip\' data files provided.')
-        for filename in pos_file_names:
-            ds = gdal.Open(filename)
-            image = ds.GetRasterBand(1).ReadAsArray()
-            if image is None:
-                print('broken image:' + filename)
+    if (not os.path.isdir(os.path.join(NACDir, img_dir))):
+        print('Please check that you have extracted the \'Crater.zip\' and \'Not Crater.zip\' data files provided.')
+    else:
+        for dir_ext in dir_extension:
+            if (not os.path.isdir(os.path.join(NACDir, img_dir, dir_ext))):
+                print('Please check the dir_extension folder names provided.')
             else:
-                #if('NAC' in filename):
-                #    image = resample_image(image, 40)  # Reduce scale to match that used by our DNN (0.5m -> 20m resolution, as in DEM)
-                #image = np.array(image)
+                pos_file_names = glob.glob(os.path.join(NACDir, img_dir, dir_ext, '*.tif'))
+                for filename in pos_file_names:
+                    ds = gdal.Open(filename)
+                    image = ds.GetRasterBand(1).ReadAsArray()
+                    if image is None:
+                        print('broken image:' + filename)
+                    else:
+                        #if('NAC' in filename):
+                        #    image = resample_image(image, 40)  # Reduce scale to match that used by our DNN (0.5m -> 20m resolution, as in DEM)
+                        #image = np.array(image)
 
-                window_scale = [[8, 8], [15, 15]]  # sliding window sizes
-                num_scales = len(window_scale)
+                        window_scale = [[8, 8], [15, 15]]  # sliding window sizes
+                        num_scales = len(window_scale)
 
-                image_name = filename.split(os.path.join(NACDir, img_dir, dir_ext,''))[1].split('.tif')[0]
-                image_name, image_id = image_name.split('_d40_')
+                        image_name = filename.split(os.path.join(NACDir, img_dir, dir_ext,''))[1].split('.tif')[0]
+                        image_name, image_id = image_name.split('_d40_')
 
-                #output_name = 'conv_' + image_name
-                #output_filename = (NACDir + output_name + '.tif')
-                csv_name = 'csv_' + img_dir
-                csv_filename = os.path.join(NACDir, csv_name)
+                        #output_name = 'conv_' + image_name
+                        #output_filename = (NACDir + output_name + '.tif')
+                        csv_name = 'csv_' + img_dir
+                        csv_filename = os.path.join(NACDir, csv_name)
 
-                fig, axarr = plt.subplots(1, 2)
-                axarr[0].imshow(image, cmap='gray')
-                image = image.astype(float) - np.min(image.astype(float))
-                image = image.astype(float) / (np.max(image.astype(float)) + 1e-8)
+                        fig, axarr = plt.subplots(1, 2)
+                        axarr[0].imshow(image, cmap='gray')
+                        image = image.astype(float) - np.min(image.astype(float))
+                        image = image.astype(float) / (np.max(image.astype(float)) + 1e-8)
 
-                #Grid Search
-                #Search over:
-                #Foreshortening_angle \in [0,1]
-                #Shadow_angle \in [0,1]
-                #Foreshortening_degree \in [0,1]
-                #Rim_prominence_degree \in [0,1]
-                #5*10*5*6 = 1500
+                        #Grid Search
+                        #Search over:
+                        #Foreshortening_angle \in [0,1]
+                        #Shadow_angle \in [0,1]
+                        #Foreshortening_degree \in [0,1]
+                        #Rim_prominence_degree \in [0,1]
+                        #5*10*5*6 = 1500
 
-                best_score = 0 #Current best score
-                threshold = 0.3 #Positive detection value
-                #Threshold needs to be optimised based on detection rate.
-                #Else mathematically supposed based on kernel and image.
+                        best_score = 0 #Current best score
+                        threshold = 0.3 #Positive detection value
+                        #Threshold needs to be optimised based on detection rate.
+                        #Else mathematically supposed based on kernel and image.
 
-                variables = [0.375, 0.5, 0.412, 0.5] # Initialisation of convolution variables
-                # foreshortening_angle, shadow_angle, foreshortening_degree, rim_prominence_degree
+                        variables = [0.375, 0.5, 0.412, 0.5] # Initialisation of convolution variables
+                        # foreshortening_angle, shadow_angle, foreshortening_degree, rim_prominence_degree
 
-                if (os.path.isfile(csv_filename + '.csv')):
-                    csv_id = 0
-                    while (os.path.isfile(csv_filename + str(csv_id) + '.csv')):
-                        csv_id += 1
-                    csv_filename += str(csv_id)
-                csv_filename += '.csv'
-                true_positives, false_positives, true_negatives, false_negatives = 0,0,0,0
+                        if (os.path.isfile(csv_filename + '.csv')):
+                            csv_id = 0
+                            while (os.path.isfile(csv_filename + str(csv_id) + '.csv')):
+                                csv_id += 1
+                            csv_filename += str(csv_id)
+                        csv_filename += '.csv'
+                        true_positives, false_positives, true_negatives, false_negatives = 0,0,0,0
 
-                for foreshortening_angle in range(6): #5
-                    foreshortening_angle = (foreshortening_angle * 0.1) + 1e-8
-                    for shadow_angle in range(11): #10
-                        shadow_angle = (shadow_angle * 0.1)
-                        for foreshortening_degree in range(13): #5
-                            foreshortening_degree = (foreshortening_degree * 0.05) + 0.4
-                            for rim_prominence_degree in range(7): #6
-                                rim_prominence_degree = (rim_prominence_degree * 0.2) + 0.2
-                                for scale in window_scale:
-                                    kernel = buildCraterConvolutionKernel(scale[0], scale[1], foreshortening_angle, shadow_angle, foreshortening_degree, rim_prominence_degree)
-                                    #axarr[1].imshow(kernel, cmap='gray')
-                                    convolution = slidingConvolution(image, kernel)
-                                    score = np.max(convolution)
-                                    if score > best_score:
-                                        variables = [foreshortening_angle, shadow_angle, foreshortening_degree, rim_prominence_degree]
-                                        best_score = score
+                        for foreshortening_angle in range(6): #5
+                            foreshortening_angle = (foreshortening_angle * 0.1) + 1e-8
+                            for shadow_angle in range(11): #10
+                                shadow_angle = (shadow_angle * 0.1)
+                                for foreshortening_degree in range(13): #5
+                                    foreshortening_degree = (foreshortening_degree * 0.05) + 0.4
+                                    for rim_prominence_degree in range(7): #6
+                                        rim_prominence_degree = (rim_prominence_degree * 0.2) + 0.2
+                                        for scale in window_scale:
+                                            kernel = buildCraterConvolutionKernel(scale[0], scale[1], foreshortening_angle, shadow_angle, foreshortening_degree, rim_prominence_degree)
+                                            #axarr[1].imshow(kernel, cmap='gray')
+                                            convolution = slidingConvolution(image, kernel)
+                                            score = np.max(convolution)
+                                            if score > best_score:
+                                                variables = [foreshortening_angle, shadow_angle, foreshortening_degree, rim_prominence_degree]
+                                                best_score = score
+                                            if best_score > threshold:
+                                                break
+                                        if best_score > threshold:
+                                            break
                                     if best_score > threshold:
                                         break
                                 if best_score > threshold:
                                     break
                             if best_score > threshold:
                                 break
-                        if best_score > threshold:
-                            break
-                    if best_score > threshold:
-                        break
 
-                with open(csv_filename, 'a') as csvfile:
-                    craterwriter = csv.writer(csvfile, delimiter=',', quoting=csv.QUOTE_MINIMAL)
+                        with open(csv_filename, 'a') as csvfile:
+                            craterwriter = csv.writer(csvfile, delimiter=',', quoting=csv.QUOTE_MINIMAL)
 
-                    if best_score > threshold:
-                        # crater has been detected
-                        craterwriter.writerow([img_dir, dir_ext, image_id, '1'])
-                        if(dir_ext == 'Craters'):
-                            true_positives += 1
-                        else:
-                            false_positives += 1
-                    else:
-                        # no crater has been detected
-                        craterwriter.writerow([img_dir, dir_ext, image_id, '0'])
-                        if (dir_ext == 'Not Crater'):
-                            true_negatives += 1
-                        else:
-                            false_negatives += 1
+                            if best_score > threshold:
+                                # crater has been detected
+                                craterwriter.writerow([img_dir, dir_ext, image_id, '1'])
+                                if(dir_ext == 'Craters'):
+                                    true_positives += 1
+                                else:
+                                    false_positives += 1
+                            else:
+                                # no crater has been detected
+                                craterwriter.writerow([img_dir, dir_ext, image_id, '0'])
+                                if (dir_ext == 'Not Crater'):
+                                    true_negatives += 1
+                                else:
+                                    false_negatives += 1
 
-        not_crater_accuracy = float(true_negatives) / float(true_negatives + false_negatives)
-        crater_accuracy = float(true_positives) / float(true_positives + false_positives)
-        overall_accuracy = float(true_negatives + true_positives) / float(true_negatives + false_negatives + true_positives + false_positives)
+                not_crater_accuracy = float(true_negatives) / float(true_negatives + false_negatives)
+                crater_accuracy = float(true_positives) / float(true_positives + false_positives)
+                overall_accuracy = float(true_negatives + true_positives) / float(true_negatives + false_negatives + true_positives + false_positives)
 
-    with open(csv_filename, 'a') as csvfile:
-        craterwriter = csv.writer(csvfile, delimiter=',', quoting=csv.QUOTE_MINIMAL)
-        craterwriter.writerow(['true_positives', true_positives])
-        craterwriter.writerow(['false_positives', false_positives])
-        craterwriter.writerow(['true_negatives', true_negatives])
-        craterwriter.writerow(['false_negatives', false_negatives])
-        craterwriter.writerow(['not_crater_accuracy', not_crater_accuracy])
-        craterwriter.writerow(['crater_accuracy', crater_accuracy])
-        craterwriter.writerow(['overall_accuracy', overall_accuracy])
-        print('Results for ' + dir_ext)
-        print('++: ' + str(true_positives) + ' -+: ' + str(false_positives) + ' +-: ' + str(true_negatives) + ' --: ' + str(false_negatives))
-        print('Crater accuracy: ' + str(crater_accuracy))
-        print('Not crater accuracy: ' + str(not_crater_accuracy))
-        print('Overall accuracy: ' + str(overall_accuracy))
+        with open(csv_filename, 'a') as csvfile:
+            craterwriter = csv.writer(csvfile, delimiter=',', quoting=csv.QUOTE_MINIMAL)
+            craterwriter.writerow(['true_positives', true_positives])
+            craterwriter.writerow(['false_positives', false_positives])
+            craterwriter.writerow(['true_negatives', true_negatives])
+            craterwriter.writerow(['false_negatives', false_negatives])
+            craterwriter.writerow(['not_crater_accuracy', not_crater_accuracy])
+            craterwriter.writerow(['crater_accuracy', crater_accuracy])
+            craterwriter.writerow(['overall_accuracy', overall_accuracy])
+            print('Results for ' + dir_ext)
+            print('++: ' + str(true_positives) + ' -+: ' + str(false_positives) + ' +-: ' + str(true_negatives) + ' --: ' + str(false_negatives))
+            print('Crater accuracy: ' + str(crater_accuracy))
+            print('Not crater accuracy: ' + str(not_crater_accuracy))
+            print('Overall accuracy: ' + str(overall_accuracy))

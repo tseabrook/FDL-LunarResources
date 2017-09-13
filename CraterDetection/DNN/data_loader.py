@@ -1,5 +1,5 @@
 #Written by Yarin Gal
-#yg279@cam.ac.uk‎
+#yg279@cam.ac.uk
 
 import numpy as np
 import glob, os, cv2
@@ -22,7 +22,7 @@ def load_data(base_folder, start_row=0, end_row=np.inf, start_col=0, end_col=np.
             arrs += [x]
     X = np.array(arrs).reshape((-1, 32*32)) / 255.
     print('file_names len', len(file_names), 'X shape', X.shape)
-    return X
+    return X, file_names
 
 # filter files only within row/column range
 def filter_row_col(file_names, start_row, end_row, start_col, end_col):

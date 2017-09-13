@@ -1,7 +1,6 @@
 #Casey Handmer's Adaptive Crater Convolution Kernel
 #Written in Mathematica
 #caseyhandmer@gmail.com
-
 #Translated by Timothy Seabrook with additions
 #timothy.seabrook@cs.ox.ac.uk
 

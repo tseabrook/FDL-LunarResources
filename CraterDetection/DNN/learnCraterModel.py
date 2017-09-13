@@ -1,5 +1,5 @@
 #Written by Yarin Gal
-#yg279@cam.ac.uk‎
+#yg279@cam.ac.uk
 #Contributions by Timothy Seabrook
 #timothy.seabrook@cs.ox.ac.uk
 
@@ -9,13 +9,14 @@ from data_loader import load_data, create_dataset, shuffle, split
 from model import get_neon_set, fit_model, test_model
 from neon.models import Model
 
-rootDir = os.path.dirname(os.path.abspath(__file__))
-dataDir = os.path.join(rootDir, 'fdl_lunar_nac')
+thisDir = os.path.dirname(os.path.abspath(__file__))
+rootDir = os.path.join(thisDir, os.pardir, os.pardir)
+dataDir = os.path.join(rootDir, 'Data')
+NACDir = os.path.join(dataDir, 'LROC_NAC')
+NACEquatorialDir = os.path.join(NACDir, 'Equatorial')
+NACPolarDir = os.path.join(NACDir, 'South_Pole')
 
 log_name = os.path.join(os.getcwd(), time.strftime('exp_%Y%m%d_%H%M%S') + '.log')
-modes = {0: 'train',
-         1: 'test'}
-mode = modes[0]
 
 def log(text):
     print(text)
@@ -26,14 +27,14 @@ def log(text):
 log('Creating log file ' + log_name)
 
 #LROC NAC: Lunar Reconnaissance Orbiter Camera - Narrow Angled Camera
-eq_pos_train = load_data(os.path.join(dataDir,'equatorial_positive'), end_row=1008)
-eq_pos_test = load_data(os.path.join(dataDir,'equatorial_positive'), start_row=1024, is_augment=False)
-eq_neg_train = load_data(os.path.join(dataDir,'equatorial_negative'), end_row=1008)
-eq_neg_test = load_data(os.path.join(dataDir,'equatorial_negative'), start_row=1024, is_augment=False)
-pol_pos_train = load_data(os.path.join(dataDir,'polar_positive'), end_row=1008)
-pol_pos_test = load_data(os.path.join(dataDir,'polar_positive'), start_row=1024, is_augment=False)
-pol_neg_train = load_data(os.path.join(dataDir,'polar_negative'), end_row=1008)
-pol_neg_test = load_data(os.path.join(dataDir,'polar_negative'), start_row=1024, is_augment=False)
+eq_pos_train = load_data(os.path.join(NACEquatorialDir,'Crater'), end_row=1008)
+eq_pos_test = load_data(os.path.join(NACEquatorialDir,'Crater'), start_row=1024, is_augment=False)
+eq_neg_train = load_data(os.path.join(NACEquatorialDir,'Not Crater'), end_row=1008)
+eq_neg_test = load_data(os.path.join(NACEquatorialDir,'Not Crater'), start_row=1024, is_augment=False)
+pol_pos_train = load_data(os.path.join(NACPolarDir,'Crater'), end_row=1008)
+pol_pos_test = load_data(os.path.join(NACPolarDir,'Crater'), start_row=1024, is_augment=False)
+pol_neg_train = load_data(os.path.join(NACPolarDir,'Not Crater'), end_row=1008)
+pol_neg_test = load_data(os.path.join(NACPolarDir,'Not Crater'), start_row=1024, is_augment=False)
 empty_test = np.zeros((0, 32*32))
 
 print 'Test / Train ratios:'
@@ -80,33 +81,28 @@ eval_pairs = [
               )
 ]
 
-if(mode == 'train'):
-    # for (name, (train_pos, train_neg), (test_pos, test_neg)) in eval_pairs:
-    for train_tuple, test_tuples in eval_pairs:
-        name, epochs, train_pos, train_neg = train_tuple
-        log('Exp: ' + name + ', epochs: ' +  str(epochs))
-        X, y = create_dataset(train_pos, train_neg)
-        X, y = shuffle(X, y)
-        train_split = int(0.8 * X.shape[0])
-        train_set = get_neon_set(X[:train_split], y[:train_split])
-        val_set = get_neon_set(X[train_split:], y[train_split:])
-        model = fit_model(train_set, val_set, num_epochs=epochs)
-        train_error = test_model(model, train_set)
-        log('Train Misclassification error = %.2f%%' % train_error)
-        val_error = test_model(model, val_set)
-        log('Val Misclassification error = %.2f%%' % val_error)
-        for test_tuple in test_tuples:
-            name, test_pos, test_neg = test_tuple
-            log('Exp: ' + name)
-            X_test, y_test = create_dataset(test_pos, test_neg)
-            test_set = get_neon_set(X_test, y_test)
-            test_error = test_model(model, test_set)
-            log('  Test Misclassification error = %.2f%%' % test_error)
-        log('')
+# for (name, (train_pos, train_neg), (test_pos, test_neg)) in eval_pairs:
+for train_tuple, test_tuples in eval_pairs:
+    name, epochs, train_pos, train_neg = train_tuple
+    log('Exp: ' + name + ', epochs: ' +  str(epochs))
+    X, y = create_dataset(train_pos, train_neg)
+    X, y = shuffle(X, y)
+    train_split = int(0.8 * X.shape[0])
+    train_set = get_neon_set(X[:train_split], y[:train_split])
+    val_set = get_neon_set(X[train_split:], y[train_split:])
+    model = fit_model(train_set, val_set, num_epochs=epochs)
+    train_error = test_model(model, train_set)
+    log('Train Misclassification error = %.2f%%' % train_error)
+    val_error = test_model(model, val_set)
+    log('Val Misclassification error = %.2f%%' % val_error)
+    for test_tuple in test_tuples:
+        name, test_pos, test_neg = test_tuple
+        log('Exp: ' + name)
+        X_test, y_test = create_dataset(test_pos, test_neg)
+        test_set = get_neon_set(X_test, y_test)
+        test_error = test_model(model, test_set)
+        log('  Test Misclassification error = %.2f%%' % test_error)
+    log('')
 
-        model.get_description()
-        model.save_params('eq_polar_params.p')
-else:
-    paramsFilename = os.path.join(rootDir,'eq_polar_params.p')
-    model = Model(paramsFilename)
     model.get_description()
+    model.save_params('eq_polar_params.p')
