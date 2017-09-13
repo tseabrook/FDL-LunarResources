@@ -13,15 +13,22 @@ from pprint import pprint
 import matplotlib.patches as patches
 
 #cut_PASCAL_VOCs takes annotations in the PASCAL_VOC format
-#  and draws them to an image
+#  and draws them to the source image.
 
 #Variables Definition:
 xSplits = 236
 ySplits = 236
 
-rootDir = '/Users/seabrook/Documents/FDL/FDL-LunarResources/PDS_FILES/LROC_BigDEM/'
-srcAnnotation = rootDir+'annotations/PV_annotations.json'
-srcImage = rootDir+'hs-45-45_lola20sp_p26.tif'
+thisDir = os.path.dirname(os.path.abspath(__file__))
+rootDir = os.path.join(thisDir, os.pardir, os.pardir)
+DEMDir = os.path.join(rootDir, 'Data', 'LOLA_DEM', 'South_Pole')
+targetDir = os.path.join(DEMDir, 'Small_Tiles', 'p26')
+annotationDir = os.path.join(targetDir, 'Annotated')
+
+#Change these two lines to change source annotations and images
+srcAnnotation = os.path.join(annotationDir,'hs-45-45_lola20sp_p26_VOC.json')
+srcImage = os.path.join(DEMDir, 'Large_Tiles', 'hs-45-45_lola20sp_p26.tif')
+
 ds = gdal.Open(srcImage)
 img = np.array(ds.GetRasterBand(1).ReadAsArray())
 fig,ax = plt.subplots(1)

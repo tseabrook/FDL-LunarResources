@@ -132,13 +132,25 @@ xSplits = 236
 ySplits = 236
 
 order = 'TopBottom'
-rootDir = '/Users/seabrook/Documents/FDL/FDL-LunarResources/PDS_FILES/LROC_BigDEM/'
-annotationDir = rootDir + 'annotations/'
-xmlImgDir = rootDir + '/TimSort/6000-8999/Crater/'
-uniqueBoxes = []
-PASCALVOC_filename = annotationDir+'hs-45-45_lola20sp_p26_VOC.json'
 
-ds = gdal.Open(rootDir + 'hs-45-45_lola20sp_p26.tif')
+
+thisDir = os.path.dirname(os.path.abspath(__file__))
+rootDir = os.path.join(thisDir, os.pardir, os.pardir)
+DEMDir = os.path.join(rootDir, 'Data','LOLA_DEM', 'South_Pole')
+targetDir = os.path.join(DEMDir, 'Small_Tiles', 'p26')
+annotationDir = os.path.join(targetDir,'Annotated')
+LabelImgDir = os.path.join(annotationDir, 'LabelImg')
+RectLabelDir = os.path.join(annotationDir, 'RectLabel')
+
+PASCALVOC_filename = os.path.join(annotationDir,'hs-45-45_lola20sp_p26_VOC.json')
+
+
+xmlImgDir = rootDir + '/TimSort/6000-8999/Crater/'
+
+
+uniqueBoxes = []
+
+ds = gdal.Open(os.path.join(DEMDir, 'Large_Tiles', 'hs-45-45_lola20sp_p26.tif'))
 img = np.array(ds.GetRasterBand(1).ReadAsArray())
 
 fig, ax = plt.subplots(1)
@@ -150,13 +162,13 @@ if(os.path.isfile(PASCALVOC_filename)):
 else:
     output = {'object': []}
 
-pos_file_names = glob.glob(annotationDir+'*.xml')
+pos_file_names = glob.glob(os.path.join(LabelImgDir,'*.xml'))
 for filename in pos_file_names:
 
     source_name, cut_id = filename.split('_cut')
     cut_id, ext = cut_id.split('.')
 
-    source_name = source_name.split(annotationDir)[-1]
+    source_name = source_name.split(os.path.join(LabelImgDir,''))[-1]
     source_img = xmlImgDir + source_name + '_cut' + cut_id + '.tif'
 
     cut_id = int(cut_id)  # convert ID from string
@@ -218,7 +230,7 @@ for filename in pos_file_names:
             print('repeated box')
 
 #Pulling files
-pos_file_names = glob.glob(annotationDir+'*.json')
+pos_file_names = glob.glob(os.path.join(RectLabelDir,'*.json'))
 for filename in pos_file_names:
 
     # Read annotation.json (Assume format of RectLabel output)
@@ -230,7 +242,7 @@ for filename in pos_file_names:
         source_file, cut_id = filename.split('_cut')
         cut_id, ext = cut_id.split('.')
 
-        source_name = source_name.split(annotationDir)[-1]
+        source_name = source_name.split(os.path.join(RectLabelDir,''))[-1]
         source_img = xmlImgDir + source_name + '_cut' + cut_id + '.tif'
 
         cut_id = int(cut_id)  # convert ID from string

@@ -95,7 +95,12 @@ def checkUniqueBox(bbox, uniqueBoxes):
          returnValue.append(bbox)
     return returnValue
 
-annotationDir = '/Users/seabrook/Documents/FDL/FDL-LunarResources/PDS_FILES/LROC_NAC/annotations/'
+
+thisDir = os.path.dirname(os.path.abspath(__file__))
+rootDir = os.path.join(thisDir, os.pardir, os.pardir)
+NACDir = os.path.join(rootDir, 'Data', 'LROC_NAC', 'South_Pole')
+annotationDir = os.path.join(NACDir, 'Annotated')
+
 uniqueBoxes = []
 num_craters = 0
 
