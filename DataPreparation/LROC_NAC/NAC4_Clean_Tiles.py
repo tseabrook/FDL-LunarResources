@@ -1,3 +1,6 @@
+#Written by Timothy Seabrook
+#timothy.seabrook@cs.ox.ac.uk
+
 from PIL import Image
 import glob, os
 import numpy as np
@@ -274,11 +277,13 @@ for filename in pos_file_names:
                 height, width = (v2 - v1), (h2 - h1)  # Read width and height
                 image = image2[v1:v2, h1:h2]
                 if((height == 32) & (width == 32)):
+                    #Reshaping Successful
                     if(saveImage == True):
                         output_filename = os.path.join(TileDir, originalFilename.split('.')[0] + '_x' + str(h1) + '_y' + str(v1) + '.tif')
                         image = Image.fromarray(image)
                         image.save(output_filename)
                 else:
+                    #Reshaping Failed
                     if (not os.path.isdir(os.path.join(TileDir, 'fail'))):  # SUBJECT TO RACE CONDITION
                         os.makedirs(os.path.join(TileDir, 'fail'))
                     output_filename = os.path.join(TileDir, 'fail', originalFilename.split('.')[0] + '_x' + str(h1) + '_y' + str(v1) + '.tif')
@@ -286,8 +291,15 @@ for filename in pos_file_names:
                     image.save(output_filename)
                     # os.remove(filename)
             else:
-                if (not os.path.isdir(os.path.join(TileDir, 'fail'))):  # SUBJECT TO RACE CONDITION
-                    os.makedirs(os.path.join(TileDir, 'fail'))
-                output_filename = os.path.join(TileDir, 'fail', originalFilename.split('.')[0] + '_x' + str(h1) + '_y' + str(v1) + '.tif')
+                #Reshaping not required
+                output_filename = os.path.join(TileDir, originalFilename.split('.')[0] + '_x' + str(h1) + '_y' + str(v1) + '.tif')
                 image = Image.fromarray(image)
                 image.save(output_filename)
+        else:
+            # Couldn't find source image
+            if (not os.path.isdir(os.path.join(TileDir, 'fail'))):  # SUBJECT TO RACE CONDITION
+                os.makedirs(os.path.join(TileDir, 'fail'))
+            output_filename = os.path.join(TileDir, 'fail',
+                                           'find'+originalFilename.split('.')[0] + '_x' + str(h1) + '_y' + str(v1) + '.tif')
+            image = Image.fromarray(image)
+            image.save(output_filename)

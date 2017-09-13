@@ -1,3 +1,6 @@
+#Written by Yarin Gal
+#yg279@cam.ac.uk‎
+
 from neon.data import ArrayIterator
 from neon import backends
 from neon.transforms import Rectlin

@@ -1,3 +1,6 @@
+#Written by Timothy Seabrook
+#timothy.seabrook@cs.ox.ac.uk
+
 import urllib2
 import csv
 from lxml import html

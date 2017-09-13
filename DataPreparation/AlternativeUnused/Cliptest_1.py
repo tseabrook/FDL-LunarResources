@@ -1,3 +1,5 @@
+#Written by Dietmar Backes
+#djbackes76@gmail.com
 
 '''  Prototype for image cropping / cooky cut '''
 

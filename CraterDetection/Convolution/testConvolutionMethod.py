@@ -1,3 +1,7 @@
+#Casey Handmer's Adaptive Crater Convolution Kernel
+#caseyhandmer@gmail.com
+#Written by Timothy Seabrook
+#timothy.seabrook@cs.ox.ac.uk
 
 import numpy as np
 #from PIL import Image
@@ -10,8 +14,6 @@ from osgeo import gdal
 #from scipy.optimize import fsolve, minimize
 import glob
 import csv
-
-
 
 def buildCraterConvolutionKernel(scaleX, scaleY, foreshortening_angle, shadow_angle, foreshortening_degree, rim_prominence_degree):
 
@@ -45,19 +47,21 @@ def slidingConvolution(target, kernel, step=1):
     return convolution
 #Convolutions in scipy
 
-#root_dir = '/Users/seabrook/Documents/FDL/FDL-LunarResources/PDS_FILES/'
-root_dir = '/Users/seabrook/Dropbox/fdl_lunar_nac/'
+thisDir = os.path.dirname(os.path.abspath(__file__))
+rootDir = os.path.join(thisDir, os.pardir, os.pardir)
+dataDir = os.path.join(rootDir, 'Data')
+NACDir = os.path.join(dataDir, 'LROC_NAC', 'South_Pole')
 
-
-dir_type = ['polar_positive', 'polar_negative']
+dir_type = ['Crater', 'Not Crater']
 #dir_type = 'LOLA_DEM'
 dir_extension = ['eleni-tim', 'shashi-tim']
 
 for img_dir in dir_type:
     for dir_ext in dir_extension:
-        pos_file_names = glob.glob(root_dir + img_dir + '/' + dir_ext + '/' +'*.tif')
+        pos_file_names = glob.glob(os.path.join(NACDir, img_dir, dir_ext, '*.tif'))
+        if(pos_file_names.__len__ < 1):
+            print('Please check that you have extracted the \'.zip\' data files provided.')
         for filename in pos_file_names:
-
             ds = gdal.Open(filename)
             image = ds.GetRasterBand(1).ReadAsArray()
             if image is None:
@@ -69,15 +73,14 @@ for img_dir in dir_type:
 
                 window_scale = [[8, 8], [15, 15]]  # sliding window sizes
                 num_scales = len(window_scale)
-                threshold = 0.3
 
-                image_name = filename.split(root_dir + img_dir + '/' + dir_ext + '/')[1].split('.tif')[0]
+                image_name = filename.split(os.path.join(NACDir, img_dir, dir_ext,''))[1].split('.tif')[0]
                 image_name, image_id = image_name.split('_d40_')
 
                 #output_name = 'conv_' + image_name
-                #output_filename = (root_dir + output_name + '.tif')
+                #output_filename = (NACDir + output_name + '.tif')
                 csv_name = 'csv_' + img_dir
-                csv_filename = root_dir + csv_name
+                csv_filename = os.path.join(NACDir, csv_name)
 
                 fig, axarr = plt.subplots(1, 2)
                 axarr[0].imshow(image, cmap='gray')
@@ -92,8 +95,13 @@ for img_dir in dir_type:
                 #Rim_prominence_degree \in [0,1]
                 #5*10*5*6 = 1500
 
-                best_score = 0
-                variables = [0.375, 0.5, 0.412, 0.5]
+                best_score = 0 #Current best score
+                threshold = 0.3 #Positive detection value
+                #Threshold needs to be optimised based on detection rate.
+                #Else mathematically supposed based on kernel and image.
+
+                variables = [0.375, 0.5, 0.412, 0.5] # Initialisation of convolution variables
+                # foreshortening_angle, shadow_angle, foreshortening_degree, rim_prominence_degree
 
                 if (os.path.isfile(csv_filename + '.csv')):
                     csv_id = 0
@@ -130,23 +138,23 @@ for img_dir in dir_type:
                     if best_score > threshold:
                         break
 
-                if best_score > threshold:
-                    with open(csv_filename, 'a') as csvfile:
-                        craterwriter = csv.writer(csvfile, delimiter=',', quoting=csv.QUOTE_MINIMAL)
+                with open(csv_filename, 'a') as csvfile:
+                    craterwriter = csv.writer(csvfile, delimiter=',', quoting=csv.QUOTE_MINIMAL)
+
+                    if best_score > threshold:
+                        # crater has been detected
                         craterwriter.writerow([img_dir, dir_ext, image_id, '1'])
                         if(dir_ext == 'Craters'):
                             true_positives += 1
                         else:
                             false_positives += 1
-                else:
-                    with open(csv_filename, 'a') as csvfile:
-                        craterwriter = csv.writer(csvfile, delimiter=',', quoting=csv.QUOTE_MINIMAL)
+                    else:
+                        # no crater has been detected
                         craterwriter.writerow([img_dir, dir_ext, image_id, '0'])
                         if (dir_ext == 'Not Crater'):
                             true_negatives += 1
                         else:
                             false_negatives += 1
-                    #crater has been detected
 
         not_crater_accuracy = float(true_negatives) / float(true_negatives + false_negatives)
         crater_accuracy = float(true_positives) / float(true_positives + false_positives)

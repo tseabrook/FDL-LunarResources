@@ -1,3 +1,6 @@
+#Written by Timothy Seabrook
+#timothy.seabrook@cs.ox.ac.uk
+
 import imageio
 import glob
 

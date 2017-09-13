@@ -1,3 +1,6 @@
+#Written by Timothy Seabrook
+#timothy.seabrook@cs.ox.ac.uk
+
 import numpy as np
 import itertools
 import math

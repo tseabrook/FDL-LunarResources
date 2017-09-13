@@ -1,3 +1,6 @@
+#Written by Timothy Seabrook
+#timothy.seabrook@cs.ox.ac.uk
+
 import glob, os
 from shutil import copyfile
 

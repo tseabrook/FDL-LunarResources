@@ -1,3 +1,5 @@
+#Written by Timothy Seabrook
+#timothy.seabrook@cs.ox.ac.uk
 
 from PIL import Image
 import numpy as np

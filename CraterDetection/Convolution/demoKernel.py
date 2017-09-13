@@ -1,3 +1,7 @@
+#Casey Handmer's Adaptive Crater Convolution Kernel
+#caseyhandmer@gmail.com
+#Written by Timothy Seabrook
+#timothy.seabrook@cs.ox.ac.uk
 
 import numpy as np
 from PIL import Image
@@ -11,7 +15,7 @@ from osgeo import gdal
 import glob
 import csv
 
-
+#demoKernel generates images of the kernel adaption to be used in presentation
 
 def buildCraterConvolutionKernel(scaleX, scaleY, foreshortening_angle, shadow_angle, foreshortening_degree, rim_prominence_degree):
 
@@ -47,9 +51,12 @@ def slidingConvolution(target, kernel, step=1):
     return convolution
 
 
-#root_dir = '/Users/seabrook/Documents/FDL/FDL-LunarResources/PDS_FILES/'
-root_dir = '/Users/seabrook/Documents/FDL/Kernel/'
 
+thisDir = os.path.dirname(os.path.abspath(__file__))
+demoDir = os.path.join(thisDir, 'Kernel')
+
+if(not os.path.isdir(demoDir)): #SUBJECT TO RACE CONDITION
+    os.makedirs(demoDir)
 
 window_scale = [[15, 15]]  # sliding window sizes
 num_scales = len(window_scale)
@@ -69,5 +76,5 @@ for scale in window_scale:
                                                   foreshortening_degree,
                                                   rim_prominence_degree)
                     image = Image.fromarray(((kernel*255)//1).astype(np.uint8))
-                    image.save(root_dir + 'kernel_'+str(id).zfill(5)+'.png')
+                    image.save(demoDir + 'kernel_'+str(id).zfill(5)+'.png')
                     id += 1

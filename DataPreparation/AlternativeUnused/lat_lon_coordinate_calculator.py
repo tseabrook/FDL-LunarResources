@@ -9,6 +9,11 @@ from distutils.util import strtobool
 import pvl
 from pvl import load as load_label
 
+#This script doesn't really work at the moment, as the NAC images we've used do not include the necessary header information
+#However, the equations within may prove useful at a later time.
+#The original script can be found at:
+#https://github.com/cthorey/pdsimage/blob/master/pdsimage/PDS_Extractor.py
+
 class BinaryTable(object):
     """ Class to read image binary file from the LRO experiment
         For the moment, it can gather information about the topography

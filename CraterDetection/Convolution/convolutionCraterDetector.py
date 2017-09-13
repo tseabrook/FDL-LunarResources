@@ -1,7 +1,12 @@
-#Casey's Crater Detector
+#Casey Handmer's Adaptive Crater Convolution Kernel
 #Written in Mathematica
-#
-#Define the image detection kernels.
+#caseyhandmer@gmail.com
+
+#Translated by Timothy Seabrook with additions
+#timothy.seabrook@cs.ox.ac.uk
+
+#This script in its current form doesn't work very well...
+#Do try and improve it!
 
 import numpy as np
 from PIL import Image
@@ -9,9 +14,15 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import math
 from osgeo import gdal
-from resampleImage import resample_image
 from scipy.optimize import fsolve, minimize
 import glob
+import os, sys
+
+sys.path.append('../../DataPreparation/LROC_NAC/')
+
+#from NAC2_Resample import resample_image
+
+#Define the image detection kernels.
 
 #Crater1[scale_] := Table[Cos[ArcTan[x,y]] (Sqrt[x^2 + y^2] - 3.166) Exp[-(Sqrt[x^2 + y^2] - 3) ^2],
 #   {x, -5.001, 5, 1. /scale}, {y, -5., 5, 1. /scale}];
@@ -244,9 +255,16 @@ def connectedComponents(binary_image):
 
 
 def main():
-    root_dir = '/Users/seabrook/Documents/FDL/FDL-LunarResources/PDS_FILES/LROC_NAC/annotations/'
+    #MAIN Function uses optimisation function, which doesn't perform as well/as reliably as grid search
+    #Examine the 'testConvolutionMethod' script for a grid-search approach.
+    thisDir = os.path.dirname(os.path.abspath(__file__))
+    rootDir = os.path.join(thisDir, os.pardir, os.pardir)
+    dataDir = os.path.join(rootDir, 'Data')
+    NACDir = os.path.join(dataDir, 'LROC_NAC', 'South_Pole', 'Resampled')
 
-    pos_file_names = glob.glob(root_dir+'*.tif')
+    #root_dir = '/Users/seabrook/Documents/FDL/FDL-LunarResources/PDS_FILES/LROC_NAC/annotations/'
+
+    pos_file_names = glob.glob(NACDir+'*.tif')
     for filename in pos_file_names:
 
         ds = gdal.Open(filename)
@@ -254,16 +272,16 @@ def main():
         if image is None:
             print('broken image:' + filename)
         else:
-            image = resample_image(image, 40) #Reduce scale to match that used by our DNN (0.5m -> 20m resolution, as in DEM)
+            #image = resample_image(image, 40) #Reduce scale to match that used by our DNN (0.5m -> 20m resolution, as in DEM)
             image = np.array(image)
 
             window_scale = [[2,2],[4,4],[8,8],[16,16]] #sliding window sizes
             num_scales = len(window_scale)
             threshold = 0.4
 
-            image_name = filename.split(root_dir)[1].split('.tif')[0]
+            image_name = filename.split(NACDir)[1].split('.tif')[0]
             output_name = 'conv_' + image_name
-            output_filename = (root_dir + output_name + '.tif')
+            output_filename = os.path.join(NACDir, output_name + '.tif')
 
 
             fig,axarr = plt.subplots(1,2)

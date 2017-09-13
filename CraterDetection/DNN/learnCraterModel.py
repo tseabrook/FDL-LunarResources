@@ -1,14 +1,21 @@
+#Written by Yarin Gal
+#yg279@cam.ac.uk‎
+#Contributions by Timothy Seabrook
+#timothy.seabrook@cs.ox.ac.uk
+
 import os, time
 import numpy as np
 from data_loader import load_data, create_dataset, shuffle, split
 from model import get_neon_set, fit_model, test_model
-
+from neon.models import Model
 
 rootDir = os.path.dirname(os.path.abspath(__file__))
 dataDir = os.path.join(rootDir, 'fdl_lunar_nac')
 
 log_name = os.path.join(os.getcwd(), time.strftime('exp_%Y%m%d_%H%M%S') + '.log')
-
+modes = {0: 'train',
+         1: 'test'}
+mode = modes[0]
 
 def log(text):
     print(text)
@@ -74,7 +81,6 @@ eval_pairs = [
 ]
 
 if(mode == 'train'):
-
     # for (name, (train_pos, train_neg), (test_pos, test_neg)) in eval_pairs:
     for train_tuple, test_tuples in eval_pairs:
         name, epochs, train_pos, train_neg = train_tuple
@@ -99,5 +105,8 @@ if(mode == 'train'):
         log('')
 
         model.get_description()
+        model.save_params('eq_polar_params.p')
 else:
     paramsFilename = os.path.join(rootDir,'eq_polar_params.p')
+    model = Model(paramsFilename)
+    model.get_description()

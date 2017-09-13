@@ -1,3 +1,6 @@
+#Written by Dietmar Backes
+#djbackes76@gmail.com
+
 #import shapefile
 #import cv2
 #http://pvl.readthedocs.io/en/latest/

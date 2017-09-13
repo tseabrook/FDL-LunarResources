@@ -1,3 +1,6 @@
+#Written by Yarin Gal
+#yg279@cam.ac.uk‎
+
 import numpy as np
 import glob, os, cv2
 from PIL import Image

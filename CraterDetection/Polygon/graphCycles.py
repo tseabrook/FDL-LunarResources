@@ -1,3 +1,4 @@
+# This code is written by Neelam Yadav
 # Python Program to detect cycle in an undirected graph
 
 from collections import defaultdict
@@ -47,4 +48,3 @@ class Graph:
 
         return False
 
-    # This code is contributed by Neelam Yadav

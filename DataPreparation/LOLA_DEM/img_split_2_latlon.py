@@ -1,3 +1,8 @@
+#Written by Timothy Seabrook
+#timothy.seabrook@cs.ox.ac.uk
+
+#This script is used to refactor the naming convention of LOLA_DEM Small Tiles, into x/y coordinates.
+
 from pathlib import Path
 import glob, os
 from PIL import Image
@@ -6,6 +11,13 @@ import matplotlib.pyplot as plt
 from skimage import io
 from osgeo import gdal
 from testNAC import long_id, lat_id
+
+thisDir = os.path.dirname(os.path.abspath(__file__))
+rootDir = os.path.join(thisDir, os.pardir, os.pardir)
+dataDir = os.path.join(rootDir, 'Data')
+DEMDir = os.path.join(dataDir, 'LOLA_DEM', 'South_Pole')
+DEMLargeDir = os.path.join(DEMDir, 'Large_Tiles')
+DEMSmallDir = os.path.join(DEMDir, 'Small_Tiles')
 
 base_folder = "/Volumes/DATA DISK/PDS_FILES/LROC_BigDEM/"
 
