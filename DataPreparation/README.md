@@ -1,6 +1,6 @@
 # Data Preparation
 
-The Data Preparation folder is split into the following folders:
+The Data Preparation folder is split into folders with the following files:
 - **LROC_NAC** - Contains scripts for Lunar Reconnaissance Orbiter Camera, Narrow Angle Camera images to:
   - [**NAC1_PDS_grab.py**] Download NAC images from a provided list of product IDs
   - [**NAC2_Resample.py**] Resample NAC images, so that they may be comparative to LOLA_DEM images.
