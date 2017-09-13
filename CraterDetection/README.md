@@ -14,16 +14,15 @@ The mathematical model for the filter describing a semi-illuminated crater was w
 
 **Polygon**
 
-This script takes a bit too long to run and didn't end up being too effective.
+This script takes a bit too long to run and didn't end up being too effective, written by Timothy Seabrook
 
 Description:
   1. Detect edges using a canny filter (This in itself isn't reliable enough)
-  2. Group edges into 'shapes' permitting that some gaps may exist
+  2. Group edges into 'shapes', permitting that some gaps may exist
   3. For each shape, use a line-of-fit split-and-merge strategy to form straight lines from pixels
-  4. Convert shapes into graphs - lines to nodes and edges
+  4. Convert shapes into graphs, lines to nodes and edges
   5. Find cycles in graphs to identify convex shapes
   6. Threshold convex shapes to identify craters
-Written by Timothy Seabrook
 
 **Hough**
 
