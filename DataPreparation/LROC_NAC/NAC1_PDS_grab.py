@@ -1,8 +1,10 @@
+#/usr/local/bin/python3
+
+#Updated by Adam Lesnikowski
 #Written by Timothy Seabrook
 #timothy.seabrook@cs.ox.ac.uk
 
-import urllib
-#import urllib2
+import urllib.request
 import csv
 from lxml import html
 import requests
@@ -10,6 +12,7 @@ import numpy as np
 import threading
 import sys
 import os
+from IPython import embed
 
 sys.path.append('../../Miscellanious/')
 
@@ -39,31 +42,32 @@ threads = []
 d = []
 with open(filename,'rb') as source:
     for line in source:
-        fields = line.split('\t')
+        #embed()
+        try:
+            print('line is {}'.format(line))
+            fields = line.decode('UTF-8').split('\t')
+        except:
+            print("Unexpected error:", sys.exc_info()[0])
+            raise
+
         d.append(fields)
+
+print('d is {}'.format(d))
 
 perc_complete = 0  # Initialise percentage complete for timer
 time_elapsed = 0  # Initialise time elapsed for timer
 start = timer()  # Initialise timer
 
 def save_image_from_url(url, save_path):
-    #HTTP connections
-    urllib.urlretrieve(url, save_path)
-    #Save
-    pass
+    urllib.request.urlretrieve(url, save_path) 
+    #urllib.urlretrieve(url, save_path)
 
-def saveImage(url, path):
-    req = urllib2.Request(url)
-    resp = urllib2.urlopen(req)
-    imgdata = resp.read()
-    with open(path, 'wb') as outfile:
-        outfile.write(imgdata)
 
 
 for i in range(1,len(d)):
 
     product_id = d[i][0]
-    filetype = '.jpeg' #'.jpeg' #'.tif'
+    filetype = '.tif' #'.jpeg' #'.tif'
 
     print('Searching for CDR Product: ' + product_id)
 
