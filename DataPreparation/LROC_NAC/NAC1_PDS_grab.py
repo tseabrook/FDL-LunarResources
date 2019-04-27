@@ -1,7 +1,8 @@
 #Written by Timothy Seabrook
 #timothy.seabrook@cs.ox.ac.uk
 
-import urllib2
+import urllib
+#import urllib2
 import csv
 from lxml import html
 import requests
@@ -19,12 +20,6 @@ from timeit import default_timer as timer
 #This script reads a .txt file containing a list of desired NAC images
 #The .txt file should contain more than zero rows with the first column containing NAC product IDs.
 
-def saveImage(url, path):
-    req = urllib2.Request(url)
-    resp = urllib2.urlopen(req)
-    imgdata = resp.read()
-    with open(path, 'wb') as outfile:
-        outfile.write(imgdata)
 
 #https://stackoverflow.com/questions/16989647/importing-large-tab-delimited-txt-file-into-python
 
@@ -37,6 +32,7 @@ if(not os.path.isdir(NACDir)): #SUBJECT TO RACE CONDITION
     os.makedirs(NACDir)
 
 filename = os.path.join(dataDir,'P26_0-18000.txt')
+filename = os.path.join(dataDir, 'own.txt')
 file_object  = open(filename, 'r')
 
 threads = []
@@ -50,10 +46,24 @@ perc_complete = 0  # Initialise percentage complete for timer
 time_elapsed = 0  # Initialise time elapsed for timer
 start = timer()  # Initialise timer
 
+def save_image_from_url(url, save_path):
+    #HTTP connections
+    urllib.urlretrieve(url, save_path)
+    #Save
+    pass
+
+def saveImage(url, path):
+    req = urllib2.Request(url)
+    resp = urllib2.urlopen(req)
+    imgdata = resp.read()
+    with open(path, 'wb') as outfile:
+        outfile.write(imgdata)
+
+
 for i in range(1,len(d)):
 
     product_id = d[i][0]
-    filetype = '.tif'
+    filetype = '.jpeg' #'.jpeg' #'.tif'
 
     print('Searching for CDR Product: ' + product_id)
 
@@ -77,15 +87,15 @@ for i in range(1,len(d)):
 
         tree = html.fromstring(page.content)
         downloadURL = tree.xpath('//*[@id="browseformats"]/a[4]')
-        print('Identified image download URL: '+downloadURL[0].attrib['href'])
+        print('downloadURL is {}'.format(downloadURL))
+        print('Identified image download URL: {}'.format(downloadURL[0].attrib['href']))
+        from IPython import embed as embed
+        #embed()
+        
         print('Downloading...')
-        #resource = urllib.urlopen(downloadURL[0].attrib['href'], 'wb')
-        #time.sleep(10)
-        #output = open(save_path, "wb")
-        #output.write(resource.read())
-        #output.close()
-
-        saveImage(downloadURL[0].attrib['href'], save_path)
+        #urllib.retreive(
+        save_image_from_url(downloadURL[0].attrib['href'], save_path)
+        #saveImage(downloadURL[0].attrib['href'], save_path)
 
         #t = threading.Thread(target=saveImage, args=(downloadURL[0].attrib['href'], save_path))
         #t.start()
