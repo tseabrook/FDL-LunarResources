@@ -60,14 +60,11 @@ start = timer()  # Initialise timer
 
 def save_image_from_url(url, save_path):
     urllib.request.urlretrieve(url, save_path) 
-    #urllib.urlretrieve(url, save_path)
-
-
 
 for i in range(1,len(d)):
 
     product_id = d[i][0]
-    filetype = '.tif' #'.jpeg' #'.tif'
+    filetype = '.jpg' #'.jpeg' #'.tif'
 
     print('Searching for CDR Product: ' + product_id)
 
@@ -84,17 +81,22 @@ for i in range(1,len(d)):
 
         print('Connecting to http//moon.asu.edu')
         productURL = 'http://moon.asu.edu/planetview/inst/lroc/'+product_id
+        print("productURL is {}".format(productURL))
         page = requests.get(productURL)
         print('Connected!')
 
-        #http://python-guide-pt-br.readthedocs.io/en/latest/scenarios/scrape/
-
         tree = html.fromstring(page.content)
-        downloadURL = tree.xpath('//*[@id="browseformats"]/a[4]')
+
+        if filetype == '.tif':
+            downloadURL = tree.xpath('//*[@id="browseformats"]/a[4]')
+        elif filetype == '.jpg' or filetype == '.jpeg':
+            downloadURL = tree.xpath('//*[@id="browseformats"]/a[3]')
+        else: 
+            raise Exception('Unknown download file type. Try again please.')
+
         print('downloadURL is {}'.format(downloadURL))
         print('Identified image download URL: {}'.format(downloadURL[0].attrib['href']))
-        from IPython import embed as embed
-        #embed()
+        embed()
         
         print('Downloading...')
         #urllib.retreive(
