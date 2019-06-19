@@ -42,9 +42,8 @@ threads = []
 d = []
 with open(filename,'rb') as source:
     for line in source:
-        #embed()
         try:
-            print('line is {}'.format(line))
+            #print('line is {}'.format(line))
             fields = line.decode('UTF-8').split('\t')
         except:
             print("Unexpected error:", sys.exc_info()[0])
@@ -59,7 +58,10 @@ time_elapsed = 0  # Initialise time elapsed for timer
 start = timer()  # Initialise timer
 
 def save_image_from_url(url, save_path):
-    urllib.request.urlretrieve(url, save_path) 
+    try:
+        urllib.request.urlretrieve(url, save_path) 
+    except(IndexError):
+        print('IndexError raised. Skipping saving this image...')
 
 for i in range(1,len(d)):
 
@@ -87,7 +89,7 @@ for i in range(1,len(d)):
 
         tree = html.fromstring(page.content)
 
-        if filetype == '.tif':
+        if filetype == '.tif' or filetype == '.tiff':
             downloadURL = tree.xpath('//*[@id="browseformats"]/a[4]')
         elif filetype == '.jpg' or filetype == '.jpeg':
             downloadURL = tree.xpath('//*[@id="browseformats"]/a[3]')
@@ -95,13 +97,20 @@ for i in range(1,len(d)):
             raise Exception('Unknown download file type. Try again please.')
 
         print('downloadURL is {}'.format(downloadURL))
-        print('Identified image download URL: {}'.format(downloadURL[0].attrib['href']))
-        embed()
         
+        try:
+            print('Identified image download URL: {}'.format(downloadURL[0].attrib['href']))
+        except(IndexError):
+            print('downloadURL print not possible')
+
         print('Downloading...')
         #urllib.retreive(
-        save_image_from_url(downloadURL[0].attrib['href'], save_path)
-        #saveImage(downloadURL[0].attrib['href'], save_path)
+        try:
+            save_image_from_url(downloadURL[0].attrib['href'], save_path)
+        except(IndexError):
+            print('An IndexError occurred. Skipping downloading this image data.')
+
+        #embed()
 
         #t = threading.Thread(target=saveImage, args=(downloadURL[0].attrib['href'], save_path))
         #t.start()
