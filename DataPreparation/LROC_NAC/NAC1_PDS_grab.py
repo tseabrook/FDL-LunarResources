@@ -1,7 +1,10 @@
+#/usr/local/bin/python3
+
+#Updated by Adam Lesnikowski
 #Written by Timothy Seabrook
 #timothy.seabrook@cs.ox.ac.uk
 
-import urllib2
+import urllib.request
 import csv
 from lxml import html
 import requests
@@ -9,6 +12,7 @@ import numpy as np
 import threading
 import sys
 import os
+from IPython import embed
 
 sys.path.append('../../Miscellanious/')
 
@@ -19,12 +23,6 @@ from timeit import default_timer as timer
 #This script reads a .txt file containing a list of desired NAC images
 #The .txt file should contain more than zero rows with the first column containing NAC product IDs.
 
-def saveImage(url, path):
-    req = urllib2.Request(url)
-    resp = urllib2.urlopen(req)
-    imgdata = resp.read()
-    with open(path, 'wb') as outfile:
-        outfile.write(imgdata)
 
 #https://stackoverflow.com/questions/16989647/importing-large-tab-delimited-txt-file-into-python
 
@@ -37,23 +35,38 @@ if(not os.path.isdir(NACDir)): #SUBJECT TO RACE CONDITION
     os.makedirs(NACDir)
 
 filename = os.path.join(dataDir,'P26_0-18000.txt')
+filename = os.path.join(dataDir, 'own.txt')
 file_object  = open(filename, 'r')
 
 threads = []
 d = []
 with open(filename,'rb') as source:
     for line in source:
-        fields = line.split('\t')
+        try:
+            #print('line is {}'.format(line))
+            fields = line.decode('UTF-8').split('\t')
+        except:
+            print("Unexpected error:", sys.exc_info()[0])
+            raise
+
         d.append(fields)
+
+print('d is {}'.format(d))
 
 perc_complete = 0  # Initialise percentage complete for timer
 time_elapsed = 0  # Initialise time elapsed for timer
 start = timer()  # Initialise timer
 
+def save_image_from_url(url, save_path):
+    try:
+        urllib.request.urlretrieve(url, save_path) 
+    except(IndexError):
+        print('IndexError raised. Skipping saving this image...')
+
 for i in range(1,len(d)):
 
     product_id = d[i][0]
-    filetype = '.tif'
+    filetype = '.jpg' #'.jpeg' #'.tif'
 
     print('Searching for CDR Product: ' + product_id)
 
@@ -70,22 +83,34 @@ for i in range(1,len(d)):
 
         print('Connecting to http//moon.asu.edu')
         productURL = 'http://moon.asu.edu/planetview/inst/lroc/'+product_id
+        print("productURL is {}".format(productURL))
         page = requests.get(productURL)
         print('Connected!')
 
-        #http://python-guide-pt-br.readthedocs.io/en/latest/scenarios/scrape/
-
         tree = html.fromstring(page.content)
-        downloadURL = tree.xpath('//*[@id="browseformats"]/a[4]')
-        print('Identified image download URL: '+downloadURL[0].attrib['href'])
-        print('Downloading...')
-        #resource = urllib.urlopen(downloadURL[0].attrib['href'], 'wb')
-        #time.sleep(10)
-        #output = open(save_path, "wb")
-        #output.write(resource.read())
-        #output.close()
 
-        saveImage(downloadURL[0].attrib['href'], save_path)
+        if filetype == '.tif' or filetype == '.tiff':
+            downloadURL = tree.xpath('//*[@id="browseformats"]/a[4]')
+        elif filetype == '.jpg' or filetype == '.jpeg':
+            downloadURL = tree.xpath('//*[@id="browseformats"]/a[3]')
+        else: 
+            raise Exception('Unknown download file type. Try again please.')
+
+        print('downloadURL is {}'.format(downloadURL))
+        
+        try:
+            print('Identified image download URL: {}'.format(downloadURL[0].attrib['href']))
+        except(IndexError):
+            print('downloadURL print not possible')
+
+        print('Downloading...')
+        #urllib.retreive(
+        try:
+            save_image_from_url(downloadURL[0].attrib['href'], save_path)
+        except(IndexError):
+            print('An IndexError occurred. Skipping downloading this image data.')
+
+        #embed()
 
         #t = threading.Thread(target=saveImage, args=(downloadURL[0].attrib['href'], save_path))
         #t.start()
